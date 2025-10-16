@@ -21,8 +21,17 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "main.h"
 #include "arm_mve.h"
 #include "stdio.h"
+#include <stdint.h>
+#include <string.h>
+#include "xspi_nor.h"
+
+/* Private defines -----------------------------------------------------------*/
+
+
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,21 +52,51 @@
 /* Private variables ---------------------------------------------------------*/
 
 UART_HandleTypeDef huart1;
+XSPI_HandleTypeDef hxspi2;
 
-/* USER CODE BEGIN PV */
- uint8_t array_a[65536];
- uint8_t array_b[65536];
- uint8_t array_c[65536];
+#define HPIX 640
+#define VPIX 480
+#define N (HPIX * VPIX)
+
+
+//__attribute__((aligned(16), section(".axisram1"))) uint16_t src_u16[N];
+//__attribute__((aligned(16), section(".axisram1"))) uint16_t gain_u16[N];
+//__attribute__((aligned(16), section(".axisram1"))) uint16_t off_u16[N];
+//__attribute__((aligned(16), section(".axisram1"))) uint16_t dst_u16[N];
+//__attribute__((aligned(16), section(".axisram1"))) uint16_t temp_u16[N];
+//__attribute__((aligned(16), section(".axisram1"))) uint16_t planck_table[65536];
+
+__attribute__((aligned(16), section(".axisram1"))) uint16_t src_u16[N];  // 614 KB
+__attribute__((aligned(16), section(".axisram1"))) uint16_t planck_table[65536];  // 131 KB
+
+/* Cold data in RAM (2048 KB) */
+__attribute__((aligned(16))) uint16_t gain_u16[N];  // 614 KB
+__attribute__((aligned(16))) uint16_t dst_u16[N];   // 614 KB
+__attribute__((aligned(16))) uint16_t off_u16[N];
+__attribute__((aligned(16))) uint16_t temp_u16[N];
+
+#define LED1_SET()    (GPIOG->BSRR = LED1_Pin)
+#define LED1_RESET()  (GPIOG->BSRR = (LED1_Pin << 16))
+#define LED1_Pin GPIO_PIN_8
+#define LED1_GPIO_Port GPIOG
+#define BUFFERSIZE_XSPI                  256
+
+
+/* XSPI Test Buffers */
+uint8_t testTxBuffer[256];   // Zu schreibende Daten
+uint8_t testRxBuffer[256];   // Gelesene Daten
+
+
+
+static void process_image_full(void);
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
-/* USER CODE BEGIN PFP */
-
-/* USER CODE END PFP */
-
+static void MX_XSPI2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 /* Definitions for UART terminal */
@@ -87,85 +126,337 @@ int iar_fputc(int ch);
   * @brief  The application entry point.
   * @retval int
   */
+
+/* USER CODE BEGIN PFP */
+void process_mve(const uint16_t *src, const uint16_t *gain,
+                              uint16_t *dst, int n, int16_t offset)
+{
+  int i = 0;
+  const int step = 8;
+  const uint8_t shift = 15;  // Q15 format
+
+  // Constants for SIMD
+  const uint32x4_t rnd = vdupq_n_u32(1u << (shift - 1));  // Rounding: 0x4000
+  const int32x4_t off32 = vdupq_n_s32(offset);
+  const int32x4_t zeroS = vdupq_n_s32(0);
+  const int32x4_t negSh = vdupq_n_s32(-15);
+
+  // SIMD loop: process 8 pixels at a time
+  for (; i <= n - step; i += step)
+  {
+    uint16x8_t s16 = vld1q_u16(src + i);
+    uint16x8_t g16 = vld1q_u16(gain + i);
+
+    // 16x16 -> 32-bit multiply (TRUE 32-bit intermediate!)
+    uint32x4_t lo32 = vmullbq_int_u16(s16, g16);  // Lower 4 elements
+    uint32x4_t hi32 = vmulltq_int_u16(s16, g16);  // Upper 4 elements
+
+    // Add rounding
+    lo32 = vaddq_u32(lo32, rnd);
+    hi32 = vaddq_u32(hi32, rnd);
+
+    // Right shift by 15 (Q15 division)
+    lo32 = vshlq_u32(lo32, negSh);
+    hi32 = vshlq_u32(hi32, negSh);
+
+    // Add offset with saturation
+    int32x4_t loS = vqaddq_s32(vreinterpretq_s32_u32(lo32), off32);
+    int32x4_t hiS = vqaddq_s32(vreinterpretq_s32_u32(hi32), off32);
+
+    // Clamp to [0, 65535]
+    loS = vmaxq_s32(loS, zeroS);
+    hiS = vmaxq_s32(hiS, zeroS);
+
+    // Convert back to u32 for narrow
+    uint32x4_t loU = vreinterpretq_u32_s32(loS);
+    uint32x4_t hiU = vreinterpretq_u32_s32(hiS);
+
+    // Narrow: u32 -> u16 with saturation
+    uint16x8_t out = vdupq_n_u16(0);
+    out = vqmovnbq_u32(out, loU);  // Bottom 4 lanes
+    out = vqmovntq_u32(out, hiU);  // Top 4 lanes
+
+    vst1q_u16(dst + i, out);
+  }
+
+  // Scalar tail for remaining pixels
+  for (; i < n; ++i) {
+    uint32_t prod = (uint32_t)src[i] * (uint32_t)gain[i];
+    uint32_t rounded = prod + (1u << (shift - 1));
+    uint32_t shifted = rounded >> shift;
+    int32_t result = (int32_t)shifted + (int32_t)offset;
+
+    if (result < 0) result = 0;
+    if (result > 65535) result = 65535;
+
+    dst[i] = (uint16_t)result;
+  }
+}
+
+void planck_lut(const uint16_t *src, uint16_t *dst, int n)
+{
+  for (int i = 0; i < n; i++) {
+    dst[i] = planck_table[src[i]];
+  }
+}
+
+void planck_lut_mve(const uint16_t *src, uint16_t *dst, int n)
+{
+    int i = 0;
+    for (; i <= n - 8; i += 8)
+    {
+        uint16x8_t idx = vld1q_u16(src + i);
+        uint16x8_t val = vldrhq_gather_shifted_offset_u16(planck_table, idx);
+        vst1q_u16(dst + i, val);
+    }
+    for (; i < n; ++i) dst[i] = planck_table[src[i]];
+}
+
+static inline uint16_t gain_to_q15(float gain)
+{
+  if (gain < 0.0f) gain = 0.0f;
+  if (gain > 1.9999f) gain = 1.9999f;
+  return (uint16_t)(gain * 32768.0f + 0.5f);
+}
+
 int main(void)
 {
-
-  /* USER CODE BEGIN 1 */
-  uint32_t cyccnt_before = 0;
-  uint32_t cyccnt_after = 0;
-  /* USER CODE END 1 */
-
-  /* Enable the CPU Cache */
-
-  /* Enable I-Cache---------------------------------------------------------*/
+  // System init
   SCB_EnableICache();
-
-  /* Enable D-Cache---------------------------------------------------------*/
   SCB_EnableDCache();
-
-  /* MCU Configuration--------------------------------------------------------*/
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
+  MPU->CTRL = 0;
+  __DSB();
+  __ISB();
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_XSPI2_Init();
   MX_USART1_UART_Init();
-  /* USER CODE BEGIN 2 */
 
-  /* Initialize the input buffers to arbitrary values */
-  for(int i = 0; i<65536; i++){
-    array_a[i] = (i%256);
-    array_b[i] = 255 - (i%256);
+  /* ============================================ */
+  /* XSPI Initialisierung                         */
+  /* ============================================ */
+  printf("\n\n");
+  printf("================================================\n");
+  printf("  XSPI NOR Flash Test\n");
+  printf("================================================\n\n");
+
+  printf("Initializing XSPI2 NOR Flash...\n");
+  XSPI_NOR_Init_All();
+  printf("XSPI2 initialized successfully!\n\n");
+
+  /* ============================================ */
+  /* XSPI Test: Write & Read 256 Bytes           */
+  /* ============================================ */
+
+  printf("================================================\n");
+  printf("  TEST: Write 256 bytes to XSPI\n");
+  printf("================================================\n");
+
+  // 1. Testdaten vorbereiten
+  printf("Preparing test data (0x00 to 0xFF)...\n");
+  for (int i = 0; i < 256; i++) {
+    testTxBuffer[i] = (uint8_t)i;
+  }
+  printf("Test data ready!\n\n");
+
+  // 2. Speicher löschen
+  printf("Erasing sector at address 0x00000000...\n");
+  if (XSPI_NOR_EraseSector(0x00000000) != HAL_OK) {
+    printf("ERROR: Erase failed!\n");
+    Error_Handler();
+  }
+  printf("Erase successful!\n\n");
+
+  // 3. Schreiben
+  printf("Writing 256 bytes to address 0x00000000...\n");
+  if (XSPI_NOR_Write(testTxBuffer, 0x00000000, 256) != HAL_OK) {
+    printf("ERROR: Write failed!\n");
+    Error_Handler();
+  }
+  printf("Write successful!\n\n");
+
+  // 4. Lesen
+  printf("Reading 256 bytes from address 0x00000000...\n");
+  if (XSPI_NOR_Read(testRxBuffer, 0x00000000, 256) != HAL_OK) {
+    printf("ERROR: Read failed!\n");
+    Error_Handler();
+  }
+  printf("Read successful!\n\n");
+
+  // 5. Vergleichen
+  printf("================================================\n");
+  printf("  Verification\n");
+  printf("================================================\n");
+
+  int errors = 0;
+  for (int i = 0; i < 256; i++) {
+    if (testTxBuffer[i] != testRxBuffer[i]) {
+      printf("ERROR at byte %d: wrote 0x%02X, read 0x%02X\n",
+             i, testTxBuffer[i], testRxBuffer[i]);
+      errors++;
+    }
   }
 
-  /* Enable the cycle counter */
-  DWT->CTRL |= 0b1;
-  /* Save the value of the cycle counter before the thumb loop */
-  cyccnt_before = DWT->CYCCNT;
-  for(int i = 0; i < 65536; i++){
-    /* add both input values and store into the 3rd array */
-    array_c[i] = array_a[i] + array_b[i];
+  if (errors == 0) {
+    printf("\n✓ SUCCESS! All 256 bytes match!\n");
+    printf("XSPI NOR Flash is working correctly.\n\n");
+  } else {
+    printf("\n✗ FAILURE! %d byte(s) mismatch!\n\n", errors);
+    Error_Handler();
   }
-  /* Get the cycle counter after the regular thumb loop */
-  cyccnt_after = DWT->CYCCNT;
-  printf("std elapsed cycles : %d\n", cyccnt_after - cyccnt_before);
-  /* Save the value of the cycle counter before the SIMD loop */
-  cyccnt_before = DWT->CYCCNT;
-  for(int i = 0; i < 4096; i++){
-    /* load the array data into vector registers */
-    uint8x16_t vector_a = vldrbq_u8((const uint8_t *) &array_a[i*16]);
-    uint8x16_t vector_b = vldrbq_u8((const uint8_t *) &array_b[i*16]);
-    uint8x16_t vector_c;
-    /* Add both vectors together */
-    vector_c = vaddq(vector_a, vector_b);
-    /* Store the resulting data */
-    vstrbq(&array_c[i*16], vector_c);
+
+  printf("First 16 bytes written:  ");
+  for (int i = 0; i < 16; i++) {
+    printf("%02X ", testTxBuffer[i]);
   }
-  /* Get the cycle counter after the SIMD loop */
-  cyccnt_after = DWT->CYCCNT;
-  printf("SIMD elapsed cycles : %d\n", cyccnt_after - cyccnt_before);
+  printf("\n");
 
-  /* USER CODE END 2 */
+  printf("First 16 bytes read:     ");
+  for (int i = 0; i < 16; i++) {
+    printf("%02X ", testRxBuffer[i]);
+  }
+  printf("\n\n");
 
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+  printf("Test complete!\n");
+  printf("================================================\n\n");
+
+  printf("\n");
+  printf("================================================\n");
+  printf("  STM32N6 14-Bit Sensor\n");
+  printf("  Format: Q15 (Gain 0.0 - 2.0)\n");
+  printf("================================================\n");
+  printf("Resolution: %ux%u = %u pixels\n", HPIX, VPIX, N);
+  printf("CPU:        600 MHz\n");
+  printf("SIMD:       ARM MVE (Helium)\n");
+  printf("Memory:     AXISRAM1\n\n");
+
+  /* ============================================ */
+  /* STEP 1: Initialize Planck Lookup Table      */
+  /* ============================================ */
+
+  printf("Initializing Planck lookup table...\n");
+
+  // Example: Simple gamma correction (you can replace with real Planck)
+  for (uint32_t i = 0; i < 65536; i++) {
+    // Linear for now - replace with your Planck formula
+    planck_table[i] = (uint16_t)i;
+
+    // Example gamma 2.2:
+    // float normalized = (float)i / 65535.0f;
+    // float gamma = powf(normalized, 1.0f / 2.2f);
+    // planck_table[i] = (uint16_t)(gamma * 65535.0f);
+  }
+
+  printf("Planck table ready!\n\n");
+
+  /* ============================================ */
+  /* STEP 2: Setup Test Image                    */
+  /* ============================================ */
+
+  printf("Generating test pattern...\n");
+
+  // Simulate 14-bit sensor data
+  for (uint32_t i = 0; i < N; i++) {
+    // Test pattern: gradient
+    uint32_t x = i % HPIX;
+    uint32_t y = i / HPIX;
+    src_u16[i] = (uint16_t)((x * 16383) / HPIX);  // 0 to 16383
+
+    // Per-pixel gain (uniform for now)
+    float gain_float = 1.0f;  // Unity gain
+    gain_u16[i] = gain_to_q15(gain_float);
+  }
+
+  printf("Test pattern ready!\n\n");
+
+  /* ============================================ */
+  /* STEP 3: Benchmark                           */
+  /* ============================================ */
+
+  printf("================================================\n");
+  printf("  BENCHMARK: Full Pipeline\n");
+  printf("================================================\n\n");
+
+  printf("Test 1: Unity gain (1.0)\n");
+  for (uint32_t i = 0; i < N; i++) {
+    gain_u16[i] = gain_to_q15(1.0f);  // 0x8000
+  }
+
+  __DSB();
+  __ISB();
+  DWT->CTRL |= 1;
+  uint32_t t0 = DWT->CYCCNT;
+
+  // Step 1: Apply gain + offset
+  process_mve(src_u16, gain_u16, temp_u16, N, 0);
+
+
+  uint32_t t1 = DWT->CYCCNT;
+
+  //planck_lut(temp_u16, dst_u16, N);
+  planck_lut_mve(temp_u16, dst_u16, N);
+
+  uint32_t t2 = DWT->CYCCNT;
+
+  uint32_t cyc_gain = (t1 - t0);
+  uint32_t cyc_planck = (t2 - t1);
+  uint32_t cyc_total = (t2 - t0);
+
+  printf("  Gain/Offset: %u cycles (%u ms)\n",
+         (unsigned)cyc_gain, (unsigned)(cyc_gain / 600000));
+  printf("  Planck LUT:  %u cycles (%u ms)\n",
+         (unsigned)cyc_planck, (unsigned)(cyc_planck / 600000));
+  printf("  Total:       %u cycles (%u ms)\n",
+         (unsigned)cyc_total, (unsigned)(cyc_total / 600000));
+  printf("  FPS:         %u\n\n",
+         (unsigned)(600000000 / cyc_total));
+
+  printf("================================================\n");
+  printf("  CONTINUOUS PROCESSING\n");
+  printf("================================================\n");
+  printf("Running at maximum speed (~23 FPS)\n");
+  printf("LED toggles every frame\n");
+  printf("Format: Q15 (gain 0.0 - 2.0)\n\n");
+
+  // LED Test
+  printf("Testing LED...\n");
+  for (int i = 0; i < 3; i++) {
+    LED1_SET();
+    HAL_Delay(200);
+    LED1_RESET();
+    HAL_Delay(200);
+  }
+  printf("LED OK!\n\n");
+
+  // Setup for continuous operation
+  for (uint32_t i = 0; i < N; i++) {
+    src_u16[i] = 8000 + (i % 8000);
+    gain_u16[i] = gain_to_q15(1.0f);
+  }
+
+  uint32_t frame_count = 0;
+  uint8_t led_state = 0;
+
   while (1)
   {
-    /* USER CODE END WHILE */
+    // Process frame at maximum speed
+    process_mve(src_u16, gain_u16, temp_u16, N, 0);
+    planck_lut_mve(temp_u16, dst_u16, N);
 
-    /* USER CODE BEGIN 3 */
+    // Toggle LED every 10 frames (~2 Hz, visible)
+    //frame_count++;
+    //if (frame_count >= 10) {
+      if (led_state) {
+        LED1_RESET();
+        led_state = 0;
+      } else {
+        LED1_SET();
+        led_state = 1;
+      }
+      //frame_count = 0;
+    //}
   }
-  /* USER CODE END 3 */
 }
 /* USER CODE BEGIN CLK 1 */
 
@@ -355,6 +646,24 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOE_CLK_ENABLE();
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* Configure GPIO pin Output Level */
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+/* USER CODE BEGIN MX_GPIO_Init_1 */
+/* USER CODE END MX_GPIO_Init_1 */
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOG_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin : LED1_Pin */
+  GPIO_InitStruct.Pin = LED1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  HAL_GPIO_Init(LED1_GPIO_Port, &GPIO_InitStruct);
+
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
@@ -403,7 +712,45 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
+/**
+  * @brief XSPI2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_XSPI2_Init(void)
+{
+  XSPIM_CfgTypeDef sXspiManagerCfg = {0};
 
+  /* XSPI2 parameter configuration*/
+  hxspi2.Instance = XSPI2;
+  hxspi2.Init.FifoThresholdByte = 4;
+  hxspi2.Init.MemoryMode = HAL_XSPI_SINGLE_MEM;
+  hxspi2.Init.MemoryType = HAL_XSPI_MEMTYPE_MACRONIX;
+  hxspi2.Init.MemorySize = HAL_XSPI_SIZE_512MB;
+  hxspi2.Init.ChipSelectHighTimeCycle = 1;
+  hxspi2.Init.FreeRunningClock = HAL_XSPI_FREERUNCLK_DISABLE;
+  hxspi2.Init.ClockMode = HAL_XSPI_CLOCK_MODE_0;
+  hxspi2.Init.WrapSize = HAL_XSPI_WRAP_NOT_SUPPORTED;
+  hxspi2.Init.ClockPrescaler = 2;  // ← ÄNDERN von 1 zu 2 (600MHz/3 = 200MHz)
+  hxspi2.Init.SampleShifting = HAL_XSPI_SAMPLE_SHIFT_HALFCYCLE;  // ← ÄNDERN für DTR
+  hxspi2.Init.DelayHoldQuarterCycle = HAL_XSPI_DHQC_ENABLE;
+  hxspi2.Init.ChipSelectBoundary = HAL_XSPI_BONDARYOF_NONE;
+  hxspi2.Init.MaxTran = 0;
+  hxspi2.Init.Refresh = 0;
+  hxspi2.Init.MemorySelect = HAL_XSPI_CSSEL_NCS1;
+
+  if (HAL_XSPI_Init(&hxspi2) != HAL_OK) {
+    Error_Handler();
+  }
+
+  sXspiManagerCfg.nCSOverride = HAL_XSPI_CSSEL_OVR_NCS1;
+  sXspiManagerCfg.IOPort = HAL_XSPIM_IOPORT_2;
+  sXspiManagerCfg.Req2AckTime = 1;
+
+  if (HAL_XSPIM_Config(&hxspi2, &sXspiManagerCfg, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+    Error_Handler();
+  }
+}
 #ifdef  USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number

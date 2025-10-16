@@ -153,5 +153,22 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
 }
 
 /* USER CODE BEGIN 1 */
+void HAL_XSPI_MspInit(XSPI_HandleTypeDef* hxspi)
+{
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
 
+    if(hxspi->Instance == XSPI2)
+    {
+        __HAL_RCC_XSPI2_CLK_ENABLE();
+        __HAL_RCC_XSPIM_CLK_ENABLE();
+
+        // GPIO Clock aktivieren
+        __HAL_RCC_GPIOC_CLK_ENABLE();
+        __HAL_RCC_GPIOD_CLK_ENABLE();
+        __HAL_RCC_GPIOE_CLK_ENABLE();
+
+        // GPIO konfigurieren
+        // Datenlinien DQ0-DQ7, CLK, NCS auf Alternate Function setzen
+    }
+}
 /* USER CODE END 1 */
