@@ -83,8 +83,8 @@ __attribute__((aligned(16))) uint16_t temp_u16[N];
 
 
 /* XSPI Test Buffers */
-uint8_t testTxBuffer[256];   // Zu schreibende Daten
-uint8_t testRxBuffer[256];   // Gelesene Daten
+uint8_t testTxBuffer[BUFFERSIZE_XSPI];   // Zu schreibende Daten
+uint8_t testRxBuffer[BUFFERSIZE_XSPI];   // Gelesene Daten
 
 
 
@@ -270,7 +270,7 @@ int main(void)
 
   // 3. Schreiben
   printf("Writing 256 bytes to address 0x00000000...\n");
-  if (XSPI_NOR_Write(testTxBuffer, 0x00000000, 256) != HAL_OK) {
+  if (XSPI_NOR_Write(testTxBuffer, 0x00000000, BUFFERSIZE_XSPI) != HAL_OK) {
     printf("ERROR: Write failed!\n");
     Error_Handler();
   }
@@ -278,7 +278,7 @@ int main(void)
 
   // 4. Lesen
   printf("Reading 256 bytes from address 0x00000000...\n");
-  if (XSPI_NOR_Read(testRxBuffer, 0x00000000, 256) != HAL_OK) {
+  if (XSPI_NOR_Read(testRxBuffer, 0x00000000, BUFFERSIZE_XSPI) != HAL_OK) {
     printf("ERROR: Read failed!\n");
     Error_Handler();
   }
@@ -290,7 +290,7 @@ int main(void)
   printf("================================================\n");
 
   int errors = 0;
-  for (int i = 0; i < 256; i++) {
+  for (int i = 0; i < BUFFERSIZE_XSPI; i++) {
     if (testTxBuffer[i] != testRxBuffer[i]) {
       printf("ERROR at byte %d: wrote 0x%02X, read 0x%02X\n",
              i, testTxBuffer[i], testRxBuffer[i]);
