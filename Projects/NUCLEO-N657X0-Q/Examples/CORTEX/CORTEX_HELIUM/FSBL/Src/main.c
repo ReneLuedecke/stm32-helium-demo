@@ -80,7 +80,7 @@ __attribute__((aligned(16))) uint16_t temp_u16[N];
 #define LED1_Pin GPIO_PIN_8
 #define LED1_GPIO_Port GPIOG
 #define BUFFERSIZE_XSPI                  256
-
+#define BUFFERSIZE                  256
 
 /* XSPI Test Buffers */
 uint8_t testTxBuffer[BUFFERSIZE_XSPI];   // Zu schreibende Daten
