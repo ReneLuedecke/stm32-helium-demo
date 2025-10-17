@@ -83,7 +83,7 @@ extern "C" {
 #define HAL_UART_MODULE_ENABLED
 /*#define HAL_USART_MODULE_ENABLED   */
 /*#define HAL_WWDG_MODULE_ENABLED   */
-#define HAL_XSPI_MODULE_ENABLED   /**/
+#define HAL_XSPI_MODULE_ENABLED
 /*#define HAL_CACHEAXI_MODULE_ENABLED   */
 /*#define HAL_MDIOS_MODULE_ENABLED   */
 /*#define HAL_GPU2D_MODULE_ENABLED   */
@@ -232,7 +232,7 @@ extern "C" {
 #define USE_SD_TRANSCEIVER            0U
 
 /* ################## SDIO peripheral configuration ######################### */
-	
+
 #define USE_SDIO_TRANSCEIVER          0U
 #define SDIO_MAX_IO_NUMBER            7U
 
