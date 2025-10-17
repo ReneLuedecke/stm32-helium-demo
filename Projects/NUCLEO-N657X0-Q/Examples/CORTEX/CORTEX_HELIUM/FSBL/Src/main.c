@@ -27,6 +27,8 @@
 #include <stdint.h>
 #include <string.h>
 #include "xspi_nor.h"
+#include "stm32n6xx_nucleo_xspi.h"   // Board BSP für XSPI NOR
+#include "mx25um51245g.h"           // (Flash-Component, je nach Setup)
 
 /* Private defines -----------------------------------------------------------*/
 
@@ -419,6 +421,14 @@ int main(void)
   }
 
   XSPI_NOR_Init_All();
+
+      int32_t rc = BSP_XSPI_NOR_EraseBlock(0, 0, BSP_XSPI_NOR_ERASE_64K);
+      if (rc != BSP_ERROR_NONE) {
+          printf("ERROR: Erase failed (code: %ld)\n", rc);
+          return HAL_ERROR;
+      }
+      return HAL_OK;
+
 
  // Test: Erase, Write, Read
  uint8_t testData[256];

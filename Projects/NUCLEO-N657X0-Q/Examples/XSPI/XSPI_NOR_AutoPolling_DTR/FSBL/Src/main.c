@@ -31,7 +31,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define CYCLES_TO_MS(cycles) ((cycles) / 600000)
+#define CYCLES_TO_US(cycles) ((cycles) / 600)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -63,7 +64,139 @@ static void XSPI_NOR_OctalDTRModeCfg(XSPI_HandleTypeDef *hxspi);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void XSPI_PerformanceTest(void)
+{
+    printf("\n================================================\n");
+    printf("  XSPI NOR FLASH PERFORMANCE TESTS\n");
+    printf("================================================\n\n");
 
+    XSPI_RegularCmdTypeDef sCommand = {0};
+    uint32_t cycles_start, cycles_end, cycles_elapsed;
+    uint32_t test_sizes[] = {256, 512, 1024, 4096};
+    int test_idx;
+
+    printf("Clock: 600 MHz (1 cycle = 1.67ns)\n");
+    printf("Buffer location: AXISRAM1\n\n");
+
+    /* Test 1: Sequential Write Performance */
+    printf("TEST 1: Sequential Write Performance\n");
+    printf("------------------------------------\n");
+
+    for (test_idx = 0; test_idx < 4; test_idx++) {
+        uint32_t size = test_sizes[test_idx];
+
+        /* Prepare data */
+        for (uint32_t i = 0; i < size; i++) {
+            aTxBuffer[i] = (uint8_t)(i & 0xFF);
+        }
+
+        /* Erase sector first */
+        XSPI_WriteEnable(&hxspi2);
+        sCommand.OperationType      = HAL_XSPI_OPTYPE_COMMON_CFG;
+        sCommand.Instruction        = OCTAL_SECTOR_ERASE_CMD;
+        sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
+        sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_16_BITS;
+        sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+        sCommand.AddressMode        = HAL_XSPI_ADDRESS_8_LINES;
+        sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
+        sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
+        sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
+        sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
+        sCommand.DataMode           = HAL_XSPI_DATA_NONE;
+        sCommand.Address            = 0;
+        sCommand.DummyCycles        = 0;
+        sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
+        HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+        XSPI_AutoPollingMemReady(&hxspi2);
+
+        /* Write Enable */
+        XSPI_WriteEnable(&hxspi2);
+
+        /* Measure write time */
+        sCommand.Instruction = OCTAL_PAGE_PROG_CMD;
+        sCommand.DataMode    = HAL_XSPI_DATA_8_LINES;
+        sCommand.DataLength  = size;
+        sCommand.Address     = 0;
+
+        HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+
+        /* Start timer */
+        DWT->CTRL |= 1;
+        cycles_start = DWT->CYCCNT;
+
+        HAL_XSPI_Transmit(&hxspi2, aTxBuffer, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+
+        cycles_end = DWT->CYCCNT;
+        cycles_elapsed = cycles_end - cycles_start;
+
+        XSPI_AutoPollingMemReady(&hxspi2);
+
+        uint32_t bandwidth_kbps = (size * 600000) / (cycles_elapsed / 1000);
+        printf("  %u bytes:  %u cycles (%u ms) = %u KB/s\n",
+               size, cycles_elapsed, CYCLES_TO_MS(cycles_elapsed), bandwidth_kbps / 1024);
+    }
+
+    printf("\n");
+
+    /* Test 2: Sequential Read Performance */
+    printf("TEST 2: Sequential Read Performance\n");
+    printf("-----------------------------------\n");
+
+    for (test_idx = 0; test_idx < 4; test_idx++) {
+        uint32_t size = test_sizes[test_idx];
+
+        sCommand.Instruction        = OCTAL_IO_DTR_READ_CMD;
+        sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
+        sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_16_BITS;
+        sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+        sCommand.Address            = 0;
+        sCommand.AddressMode        = HAL_XSPI_ADDRESS_8_LINES;
+        sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
+        sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
+        sCommand.DataMode           = HAL_XSPI_DATA_8_LINES;
+        sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
+        sCommand.DataLength         = size;
+        sCommand.DummyCycles        = DUMMY_CLOCK_CYCLES_READ_OCTAL;
+        sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
+
+        HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+
+        /* Start timer */
+        cycles_start = DWT->CYCCNT;
+
+        HAL_XSPI_Receive(&hxspi2, aRxBuffer, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+
+        cycles_end = DWT->CYCCNT;
+        cycles_elapsed = cycles_end - cycles_start;
+
+        uint32_t bandwidth_kbps = (size * 600000) / (cycles_elapsed / 1000);
+        printf("  %u bytes:  %u cycles (%u ms) = %u KB/s\n",
+               size, cycles_elapsed, CYCLES_TO_MS(cycles_elapsed), bandwidth_kbps / 1024);
+    }
+
+    printf("\n");
+
+    /* Test 3: Verify data integrity */
+    printf("TEST 3: Data Integrity Verification\n");
+    printf("------------------------------------\n");
+
+    int errors = 0;
+    for (uint32_t i = 0; i < BUFFERSIZE; i++) {
+        if (aRxBuffer[i] != aTxBuffer[i]) {
+            errors++;
+        }
+    }
+
+    if (errors == 0) {
+        printf("  All %u bytes verified: PASS\n", BUFFERSIZE);
+        BSP_LED_On(LED_GREEN);
+    } else {
+        printf("  FAIL: %d byte errors\n", errors);
+        BSP_LED_On(LED_RED);
+    }
+
+    printf("\n================================================\n");
+}
 /* USER CODE END 0 */
 
 /**
@@ -194,7 +327,7 @@ int main(void)
     /* Turn LED_GREEN on */
     BSP_LED_On(LED_GREEN);
   }
-
+  XSPI_PerformanceTest();
   /* DeInit XSPI */
   HAL_XSPI_DeInit(&hxspi2);
   /* USER CODE END 2 */
