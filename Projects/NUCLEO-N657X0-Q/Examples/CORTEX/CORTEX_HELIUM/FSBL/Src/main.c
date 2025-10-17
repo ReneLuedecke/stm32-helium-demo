@@ -38,6 +38,11 @@
 
 #define CYCLES_TO_MS(cycles) ((cycles) / 600000)
 #define CYCLES_TO_US(cycles) ((cycles) / 600)
+
+#define XSPI1_MMAP_BASE   0x90000000UL
+#define XSPI2_MMAP_BASE   0x70000000UL
+#define XSPI_MMAP_SIZE    0x10000000UL  // 256 MB
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -63,6 +68,8 @@ uint8_t aTxBuffer[BUFFERSIZE];
 
 /* Buffer used for reception */
 __IO uint8_t aRxBuffer[BUFFERSIZE];
+
+uint32_t xspi_mmap_base = XSPI2_MMAP_BASE;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -78,6 +85,13 @@ void planck_lut_mve(const uint16_t *src, uint16_t *dst, int n);
 static void XSPI_WriteEnable(XSPI_HandleTypeDef *hxspi);
 static void XSPI_AutoPollingMemReady(XSPI_HandleTypeDef *hxspi);
 static void XSPI_NOR_OctalDTRModeCfg(XSPI_HandleTypeDef *hxspi);
+
+/* Debug / Helper prototypes (kept inside USER CODE blocks) */
+void XSPI_PerformanceTest(void);
+void test_memory_mapped_detailed(void);
+void check_xspi_clock(void);
+void xspi_quick_status(void);
+void xspi_print_all_registers(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -94,21 +108,6 @@ int iar_fputc(int ch);
 #endif
 #endif
 
-//static const char* bsp_err_str(int32_t e)
-//{
-//    switch(e){
-//        case  0:  return "BSP_ERROR_NONE";
-//        case -1:  return "BSP_ERROR_NO_INIT";
-//        case -2:  return "BSP_ERROR_WRONG_PARAM";
-//        case -3:  return "BSP_ERROR_BUSY";
-//        case -4:  return "BSP_ERROR_PERIPH_FAILURE";
-//        case -5:  return "BSP_ERROR_COMPONENT_FAILURE";
-//        case -6:  return "BSP_ERROR_UNKNOWN_FAILURE";
-//        case -7:  return "BSP_ERROR_FEATURE_NOT_SUPPORTED";
-//        case -8:  return "BSP_ERROR_TIMEOUT";
-//        default:  return "BSP_ERROR_OTHER";
-//    }
-//}
 void XSPI_PerformanceTest(void)
 {
     // Nutze temp_u16 als Test-Buffer (ist schon im RAM!)
@@ -207,11 +206,10 @@ void XSPI_PerformanceTest(void)
         cycles_end = DWT->CYCCNT;
         cycles_elapsed = cycles_end - cycles_start;
 
-        uint32_t kbps = (size * 600) / cycles_elapsed;
+        uint32_t MBps = (uint64_t)size * 600000000ULL / cycles_elapsed / 1048576ULL;
+        printf("  %4u bytes: %6u cycles (%4u us) = %lu MB/s\n",
+               size, cycles_elapsed, CYCLES_TO_US(cycles_elapsed), MBps);
 
-        printf("  %4u bytes: %6u cycles (%4u us) = %5u KB/s (%u pages)\n",
-               size, cycles_elapsed, CYCLES_TO_US(cycles_elapsed), kbps,
-               (size + 255) / 256);
     }
 
     printf("\n[DEBUG] Write tests complete\n");
@@ -259,10 +257,10 @@ void XSPI_PerformanceTest(void)
         cycles_end = DWT->CYCCNT;
         cycles_elapsed = cycles_end - cycles_start;
 
-        uint32_t kbps = (size * 600) / cycles_elapsed;
+        uint32_t MBps = (uint64_t)size * 600000000ULL / cycles_elapsed / 1048576ULL;
+        printf("  %4u bytes: %6u cycles (%4u us) = %lu MB/s\n",
+               size, cycles_elapsed, CYCLES_TO_US(cycles_elapsed), MBps);
 
-        printf("  %4u bytes: %6u cycles (%4u us) = %5u KB/s\n",
-               size, cycles_elapsed, CYCLES_TO_US(cycles_elapsed), kbps);
     }
 
     printf("\n[DEBUG] Read tests complete\n");
@@ -323,6 +321,7 @@ void XSPI_PerformanceTest(void)
 
     printf("\n================================================\n");
 }
+
 static inline uint16_t gain_to_q15(float gain)
 {
     if (gain < 0.0f) gain = 0.0f;
@@ -396,445 +395,416 @@ void planck_lut_mve(const uint16_t *src, uint16_t *dst, int n)
     for (; i < n; ++i) dst[i] = planck_table[src[i]];
 }
 
+/* USER CODE BEGIN 4 */
+
+void xspi_memory_mapped_speed_test(void) {
+    printf("\n");
+    printf("╔════════════════════════════════════════════════╗\n");
+    printf("║ XSPI Memory-Mapped Performance Test           ║\n");
+    printf("╚════════════════════════════════════════════════╝\n");
+
+    volatile uint8_t *flash_base = (uint8_t*)xspi_mmap_base;
+    uint32_t test_sizes[] = {256, 1024, 4096, 16384, 65536};  // ← Reduced!
+    const int num_tests = 5;
+
+    printf("\nSequential Read Performance:\n");
+    printf("Size      | Cycles    | Time (us) | Speed (MB/s)\n");
+    printf("----------|-----------|-----------|-------------\n");
+
+    for (int t = 0; t < num_tests; t++) {
+        uint32_t size = test_sizes[t];
+        volatile uint32_t dummy = 0;
+
+        // Warmup (prime cache)
+        for (uint32_t i = 0; i < size; i += 4) {
+            dummy += flash_base[i];
+        }
+
+        // Actual measurement
+        __DSB();
+        __ISB();
+
+        uint32_t start = DWT->CYCCNT;
+
+        // Read test - byte-wise
+        for (uint32_t i = 0; i < size; i++) {
+            dummy += flash_base[i];
+        }
+
+        __DSB();
+        __ISB();
+        uint32_t cycles = DWT->CYCCNT - start;
+
+        uint32_t us = cycles / 600;
+        uint32_t mbps = (uint64_t)size * 600000000ULL / cycles / 1048576ULL;
+
+        printf("%7lu B | %9lu | %9lu | %11lu\n",
+               size, cycles, us, mbps);
+
+        // Prevent optimization
+        if (dummy == 0xFFFFFFFF) printf(".");
+    }
+
+    printf("\n32-bit Word Read Performance:\n");
+    printf("Size      | Cycles    | Time (us) | Speed (MB/s)\n");
+    printf("----------|-----------|-----------|-------------\n");
+
+    for (int t = 0; t < num_tests; t++) {
+        uint32_t size = test_sizes[t];
+        if (size < 4) continue;
+
+        volatile uint32_t *flash_32 = (uint32_t*)xspi_mmap_base;
+        uint32_t words = size / 4;
+        volatile uint32_t dummy = 0;
+
+        // Warmup
+        for (uint32_t i = 0; i < words; i++) {
+            dummy += flash_32[i];
+        }
+
+        __DSB();
+        __ISB();
+
+        uint32_t start = DWT->CYCCNT;
+
+        // Read test - word-wise
+        for (uint32_t i = 0; i < words; i++) {
+            dummy += flash_32[i];
+        }
+
+        __DSB();
+        __ISB();
+        uint32_t cycles = DWT->CYCCNT - start;
+
+        uint32_t us = cycles / 600;
+        uint32_t mbps = (uint64_t)size * 600000000ULL / cycles / 1048576ULL;
+
+        printf("%7lu B | %9lu | %9lu | %11lu\n",
+               size, cycles, us, mbps);
+
+        if (dummy == 0xFFFFFFFF) printf(".");
+    }
+
+    printf("\nCache Effect Test (repeated reads):\n");
+    printf("Pass | Cycles    | Time (us) | Speed (MB/s)\n");
+    printf("-----|-----------|-----------|-------------\n");
+
+    const uint32_t test_size = 16384;  // ← Reduced to 16 KB
+    volatile uint32_t *flash_32 = (uint32_t*)xspi_mmap_base;
+    uint32_t words = test_size / 4;
+
+    for (int pass = 0; pass < 5; pass++) {
+        volatile uint32_t dummy = 0;
+
+        __DSB();
+        __ISB();
+
+        uint32_t start = DWT->CYCCNT;
+
+        for (uint32_t i = 0; i < words; i++) {
+            dummy += flash_32[i];
+        }
+
+        __DSB();
+        __ISB();
+        uint32_t cycles = DWT->CYCCNT - start;
+
+        uint32_t us = cycles / 600;
+        uint32_t mbps = (uint64_t)test_size * 600000000ULL / cycles / 1048576ULL;
+
+        printf("  %d  | %9lu | %9lu | %11lu\n",
+               pass + 1, cycles, us, mbps);
+
+        if (dummy == 0xFFFFFFFF) printf(".");
+    }
+
+    printf("\nRandom Access Pattern Test:\n");
+    printf("Accesses | Cycles    | Time (us) | Avg cycles/access\n");
+    printf("---------|-----------|-----------|------------------\n");
+
+    uint32_t access_counts[] = {100, 1000, 10000};
+
+    for (int t = 0; t < 3; t++) {
+        uint32_t accesses = access_counts[t];
+        volatile uint32_t dummy = 0;
+
+        __DSB();
+        __ISB();
+
+        uint32_t start = DWT->CYCCNT;
+
+        // Pseudo-random access pattern (within 64KB to avoid huge range)
+        uint32_t idx = 0;
+        for (uint32_t i = 0; i < accesses; i++) {
+            idx = (idx * 1103515245 + 12345) & 0xFFFF;  // 0-65535 range
+            dummy += flash_base[idx];
+        }
+
+        __DSB();
+        __ISB();
+        uint32_t cycles = DWT->CYCCNT - start;
+
+        uint32_t us = cycles / 600;
+        uint32_t cycles_per_access = cycles / accesses;
+
+        printf("%8lu | %9lu | %9lu | %16lu\n",
+               accesses, cycles, us, cycles_per_access);
+
+        if (dummy == 0xFFFFFFFF) printf(".");
+    }
+
+    printf("\nBurst Read Test (using existing buffers):\n");
+    printf("Size      | Cycles    | Time (us) | Speed (MB/s)\n");
+    printf("----------|-----------|-----------|-------------\n");
+
+    // Use temp_u16 buffer that's already allocated
+    uint8_t *target = (uint8_t*)temp_u16;  // Reuse existing buffer!
+    uint32_t max_size = sizeof(temp_u16);  // 640*480*2 = 614KB
+
+    uint32_t burst_sizes[] = {1024, 4096, 16384, 65536};
+
+    for (int t = 0; t < 4; t++) {
+        uint32_t size = burst_sizes[t];
+        if (size > max_size) continue;
+
+        __DSB();
+        __ISB();
+
+        uint32_t start = DWT->CYCCNT;
+
+        // Actual memcpy
+        for (uint32_t i = 0; i < size; i++) {
+            target[i] = flash_base[i];
+        }
+
+        __DSB();
+        __ISB();
+        uint32_t cycles = DWT->CYCCNT - start;
+
+        uint32_t us = cycles / 600;
+        uint32_t mbps = (uint64_t)size * 600000000ULL / cycles / 1048576ULL;
+
+        printf("%7lu B | %9lu | %9lu | %11lu\n",
+               size, cycles, us, mbps);
+    }
+
+    printf("\nCalibration Data Load Simulation:\n");
+    printf("Simulating 640x480 camera calibration load from XSPI...\n");
+
+    // Simulate loading one line of calibration (interleaved)
+    // 640 pixels × 4 values (dark, gain, offset, emis) × 2 bytes = 5120 bytes/line
+    const uint32_t line_size = 640 * 4 * 2;
+    const uint32_t lines = 480;
+
+    printf("\nPer-line load (5120 bytes):\n");
+
+    uint32_t total_cycles = 0;
+    for (int line = 0; line < 10; line++) {  // Test 10 lines
+        uint32_t offset = line * line_size;
+        volatile uint32_t dummy = 0;
+
+        __DSB();
+        __ISB();
+        uint32_t start = DWT->CYCCNT;
+
+        // Load one line of calibration
+        for (uint32_t i = 0; i < line_size; i += 4) {
+            dummy += flash_base[offset + i];
+        }
+
+        __DSB();
+        __ISB();
+        uint32_t cycles = DWT->CYCCNT - start;
+        total_cycles += cycles;
+
+        if (dummy == 0xFFFFFFFF) printf(".");
+    }
+
+    uint32_t avg_cycles = total_cycles / 10;
+    uint32_t avg_us = avg_cycles / 600;
+    uint32_t mbps = (uint64_t)line_size * 600000000ULL / avg_cycles / 1048576ULL;
+
+    printf("  Avg per line: %lu cycles (%lu us) = %lu MB/s\n",
+           avg_cycles, avg_us, mbps);
+
+    uint32_t total_frame_cycles = avg_cycles * lines;
+    uint32_t total_frame_ms = total_frame_cycles / 600000;
+
+    printf("  Full frame (480 lines): %lu cycles (%lu ms)\n",
+           total_frame_cycles, total_frame_ms);
+    printf("  Theoretical max FPS if only loading: %lu\n",
+           600000000 / total_frame_cycles);
+
+    printf("\n");
+    printf("╔════════════════════════════════════════════════╗\n");
+    printf("║ Memory-Mapped Speed Test Complete!            ║\n");
+    printf("╚════════════════════════════════════════════════╝\n");
+}
+/* USER CODE END 4 */
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
-
-
-
-void test_memory_mapped_detailed(void) {
-    printf("\n");
-    printf("╔════════════════════════════════════════╗\n");
-    printf("║ Memory-Mapped Access Detailed Debug   ║\n");
-    printf("╚════════════════════════════════════════╝\n");
-
-    // [1] XSPI Handle Status
-    printf("\n[1] XSPI2 HAL Handle Status:\n");
-    printf("  Handle State: ");
-    switch(hxspi2.State) {
-        case HAL_XSPI_STATE_RESET:
-            printf("RESET\n");
-            break;
-        case HAL_XSPI_STATE_READY:
-            printf("READY\n");
-            break;
-        case HAL_XSPI_STATE_BUSY_CMD:
-            printf("BUSY_CMD\n");
-            break;
-        case HAL_XSPI_STATE_BUSY_TX:
-            printf("BUSY_TX\n");
-            break;
-        case HAL_XSPI_STATE_BUSY_RX:
-            printf("BUSY_RX\n");
-            break;
-        case HAL_XSPI_STATE_BUSY_AUTO_POLLING:
-            printf("BUSY_AUTO_POLLING\n");
-            break;
-        case HAL_XSPI_STATE_BUSY_MEM_MAPPED:
-            printf("BUSY_MEM_MAPPED ✓\n");
-            break;
-        case HAL_XSPI_STATE_ABORT:
-            printf("ABORT\n");
-            break;
-        case HAL_XSPI_STATE_ERROR:
-            printf("ERROR ✗\n");
-            break;
-        default:
-            printf("UNKNOWN (%d)\n", hxspi2.State);
-            break;
-    }
-
-    printf("  Error Code: 0x%08lX", hxspi2.ErrorCode);
-    if (hxspi2.ErrorCode == HAL_XSPI_ERROR_NONE) {
-        printf(" (No Error)\n");
-    } else {
-        printf("\n");
-        if (hxspi2.ErrorCode & HAL_XSPI_ERROR_TIMEOUT) {
-            printf("    - TIMEOUT\n");
-        }
-        if (hxspi2.ErrorCode & HAL_XSPI_ERROR_TRANSFER) {
-            printf("    - TRANSFER ERROR\n");
-        }
-        if (hxspi2.ErrorCode & HAL_XSPI_ERROR_DMA) {
-            printf("    - DMA ERROR\n");
-        }
-    }
-
-    // [2] Configuration Summary
-    printf("\n[2] XSPI Configuration:\n");
-    printf("  Memory Type: ");
-    switch(hxspi2.Init.MemoryType) {
-        case HAL_XSPI_MEMTYPE_MICRON:
-            printf("Micron\n");
-            break;
-        case HAL_XSPI_MEMTYPE_MACRONIX:
-            printf("Macronix ✓\n");
-            break;
-        case HAL_XSPI_MEMTYPE_APMEM:
-            printf("AP Memory\n");
-            break;
-        default:
-            printf("Unknown\n");
-            break;
-    }
-
-    printf("  Memory Size: %lu\n", hxspi2.Init.MemorySize);
-    printf("  Clock Prescaler: %lu (÷%lu)\n",
-           hxspi2.Init.ClockPrescaler,
-           hxspi2.Init.ClockPrescaler + 1);
-    printf("  Chip Select High Time: %lu cycles\n",
-           hxspi2.Init.ChipSelectHighTimeCycle);
-    printf("  Free Running Clock: %s\n",
-           hxspi2.Init.FreeRunningClock == HAL_XSPI_FREERUNCLK_ENABLE ? "YES" : "NO");
-
-    // [3] Try Memory Access
-    printf("\n[3] Attempting Memory Access:\n");
-    printf("  Base Address: 0x90000000\n");
-
-    SCB->SHCSR |= SCB_SHCSR_USGFAULTENA_Msk;
-
-    volatile uint32_t *test_addr = (uint32_t*)0x90000000;
-    volatile uint32_t dummy = 0;
-
-    printf("  Reading first word... ");
-    __disable_irq();
-    dummy = *test_addr;
-    __enable_irq();
-    printf("0x%08lX\n", dummy);
-
-    printf("  Reading first 16 bytes:\n    ");
-    for (int i = 0; i < 4; i++) {
-        printf("0x%08lX ", test_addr[i]);
-    }
-    printf("\n");
-
-    // [4] Data Pattern Analysis
-    printf("\n[4] Data Pattern Analysis (first 256 bytes):\n");
-
-    uint8_t all_ff = 1, all_00 = 1;
-    volatile uint8_t *byte_ptr = (uint8_t*)0x90000000;
-    uint32_t unique_bytes = 0;
-    uint8_t byte_count[256] = {0};
-
-    for (int i = 0; i < 256; i++) {
-        uint8_t val = byte_ptr[i];
-        if (val != 0xFF) all_ff = 0;
-        if (val != 0x00) all_00 = 0;
-
-        if (byte_count[val] == 0) {
-            unique_bytes++;
-        }
-        byte_count[val]++;
-    }
-
-    if (all_ff) {
-        printf("  Status: All 0xFF (Flash empty/erased)\n");
-    } else if (all_00) {
-        printf("  Status: All 0x00 (Likely read error)\n");
-    } else {
-        printf("  Status: Contains data pattern\n");
-        printf("  Unique bytes: %lu / 256\n", unique_bytes);
-
-        printf("  First values: ");
-        int shown = 0;
-        for (int i = 0; i < 32 && shown < 8; i++) {
-            if (byte_ptr[i] != 0x00 && byte_ptr[i] != 0xFF) {
-                printf("0x%02X ", byte_ptr[i]);
-                shown++;
-            }
-        }
-        printf("\n");
-    }
-
-    // [5] MPU Status
-    printf("\n[5] MPU Status:\n");
-    if (MPU->CTRL & MPU_CTRL_ENABLE_Msk) {
-        printf("  MPU is ENABLED\n");
-        printf("  Checking regions:\n");
-        for (int region = 0; region < 8; region++) {
-            MPU->RNR = region;
-            uint32_t rbar = MPU->RBAR;
-            uint32_t rlar = MPU->RLAR;
-
-            if (rlar & MPU_RLAR_EN_Msk) {
-                uint32_t base = rbar & 0xFFFFFFE0;
-                printf("    Region %d: Base=0x%08lX ", region, base);
-                if (base == 0x90000000) {
-                    printf("✓ (Covers XSPI)\n");
-                } else {
-                    printf("\n");
-                }
-            }
-        }
-    } else {
-        printf("  MPU is DISABLED\n");
-    }
-
-    // [6] Cache Status
-    printf("\n[6] Cache Status:\n");
-    if (SCB->CCR & SCB_CCR_IC_Msk) {
-        printf("  I-Cache: ENABLED\n");
-    } else {
-        printf("  I-Cache: DISABLED\n");
-    }
-    if (SCB->CCR & SCB_CCR_DC_Msk) {
-        printf("  D-Cache: ENABLED\n");
-    } else {
-        printf("  D-Cache: DISABLED\n");
-    }
-
-    printf("\n");
-    printf("╔════════════════════════════════════════╗\n");
-    printf("║ Debug Analysis Complete                ║\n");
-    printf("╚════════════════════════════════════════╝\n");
-}
-
-void check_xspi_clock(void) {
-    printf("\n=== XSPI Clock Configuration ===\n");
-
-    uint32_t xspi_clk = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_XSPI2);
-    uint32_t xspi_clk_mhz = xspi_clk / 1000000;
-    uint32_t xspi_clk_khz = (xspi_clk / 1000) % 1000;
-
-    printf("  XSPI2 Kernel Clock: %lu Hz (%lu.%03lu MHz)\n",
-           xspi_clk, xspi_clk_mhz, xspi_clk_khz);
-
-    if (xspi_clk < 190000000 || xspi_clk > 210000000) {
-        printf("  WARNING: Clock not optimal for OPI DTR!\n");
-        printf("    Current: %lu MHz\n", xspi_clk_mhz);
-        printf("    Recommended: 200 MHz\n");
-    } else {
-        printf("  ✓ Clock in optimal range (190-210 MHz)\n");
-    }
-
-    uint32_t prescaler = hxspi2.Init.ClockPrescaler;
-    printf("  Prescaler: %lu (Divider: %lu)\n", prescaler, prescaler + 1);
-
-    uint32_t flash_clk = xspi_clk / (prescaler + 1);
-    uint32_t flash_clk_mhz = flash_clk / 1000000;
-    uint32_t flash_clk_khz = (flash_clk / 1000) % 1000;
-
-    printf("  Effective Flash Clock: %lu.%03lu MHz\n",
-           flash_clk_mhz, flash_clk_khz);
-
-    uint32_t theoretical_bandwidth = (flash_clk_mhz * 16);
-    printf("  Theoretical Bandwidth: %lu MB/s (OPI DTR)\n", theoretical_bandwidth);
-    printf("  (Practical: ~50%% = %lu MB/s due to overhead)\n", theoretical_bandwidth / 2);
-}
-
-void xspi_quick_status(void) {
-    printf("\n=== XSPI2 Quick Status ===\n");
-
-    printf("HAL State: ");
-    if (hxspi2.State == HAL_XSPI_STATE_BUSY_MEM_MAPPED) {
-        printf("Memory-Mapped Mode Active ✓\n");
-    } else {
-        printf("NOT in Memory-Mapped Mode ✗ (State=%d)\n", hxspi2.State);
-    }
-
-    if (hxspi2.ErrorCode != HAL_XSPI_ERROR_NONE) {
-        printf("ERROR: 0x%08lX\n", hxspi2.ErrorCode);
-    }
-
-    printf("\nMemory Test: ");
-    volatile uint32_t *test = (uint32_t*)0x90000000;
-    uint32_t val = *test;
-    printf("0x%08lX", val);
-
-    if (val == 0xFFFFFFFF) {
-        printf(" (Empty Flash)\n");
-    } else if (val == 0x00000000) {
-        printf(" (Read Error?)\n");
-    } else {
-        printf(" (Has Data) ✓\n");
-    }
-
-    uint32_t clk = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_XSPI2);
-    printf("\nClock: %lu MHz\n", clk / 1000000);
-}
-
-void xspi_print_all_registers(void) {
-    printf("\n╔════════════════════════════════════════╗\n");
-    printf("║ XSPI2 Register Dump                    ║\n");
-    printf("╚════════════════════════════════════════╝\n");
-
-    XSPI_TypeDef *xspi = hxspi2.Instance;
-
-    if (xspi == NULL) {
-        printf("ERROR: XSPI2 instance is NULL!\n");
-        return;
-    }
-
-    printf("\nControl Registers:\n");
-    printf("  CR   = 0x%08lX\n", xspi->CR);
-    printf("  DCR1 = 0x%08lX\n", xspi->DCR1);
-    printf("  DCR2 = 0x%08lX\n", xspi->DCR2);
-    printf("  DCR3 = 0x%08lX\n", xspi->DCR3);
-
-    printf("\nStatus:\n");
-    printf("  SR   = 0x%08lX\n", xspi->SR);
-    printf("  Flags: ");
-    if (xspi->SR & XSPI_SR_BUSY) printf("[BUSY] ");
-    if (xspi->SR & XSPI_SR_TOF)  printf("[TIMEOUT] ");
-    if (xspi->SR & XSPI_SR_TEF)  printf("[ERROR] ");
-    if (xspi->SR & XSPI_SR_TCF)  printf("[COMPLETE] ");
-    if (xspi->SR == 0) printf("(idle)");
-    printf("\n");
-
-    printf("\nCommand Configuration:\n");
-    printf("  CCR  = 0x%08lX\n", xspi->CCR);
-    printf("  TCR  = 0x%08lX\n", xspi->TCR);
-    printf("  IR   = 0x%08lX\n", xspi->IR);
-
-    printf("\nDecoded Configuration:\n");
-    uint32_t devsize = (xspi->DCR1 & XSPI_DCR1_DEVSIZE) >> XSPI_DCR1_DEVSIZE_Pos;
-    uint32_t mem_size_mb = (1UL << (devsize + 1)) / (1024 * 1024);
-    printf("  Device Size: 2^%lu = %lu MB\n", devsize + 1, mem_size_mb);
-
-    uint32_t prescaler = (xspi->DCR2 & XSPI_DCR2_PRESCALER) >> XSPI_DCR2_PRESCALER_Pos;
-    printf("  Prescaler: %lu (Divider: %lu)\n", prescaler, prescaler + 1);
-
-    uint32_t mtyp = (xspi->DCR1 & XSPI_DCR1_MTYP) >> XSPI_DCR1_MTYP_Pos;
-    printf("  Memory Type: ");
-    switch(mtyp) {
-        case 0: printf("Micron\n"); break;
-        case 1: printf("Macronix\n"); break;
-        case 2: printf("Standard\n"); break;
-        case 3: printf("AP Memory\n"); break;
-        default: printf("Unknown\n"); break;
-    }
-}
-
-
-
-
 int main(void)
 {
-    XSPI_RegularCmdTypeDef sCommand = {0};
 
-    /* Enable Caches */
-    SCB_EnableICache();
-    SCB_EnableDCache();
+  /* USER CODE BEGIN 1 */
+	XSPI_RegularCmdTypeDef sCommand = {0};
+  /* USER CODE END 1 */
 
-    /* MCU Init */
-    HAL_Init();
-    SystemClock_Config();
+  /* Enable the CPU Cache */
 
-    /* Peripherals Init */
-    MX_GPIO_Init();
-    MX_USART1_UART_Init();
-    MX_XSPI2_Init();
+  /* Enable I-Cache---------------------------------------------------------*/
+  SCB_EnableICache();
 
-    printf("XSPI Debug startet...\r\n");
+  /* Enable D-Cache---------------------------------------------------------*/
+  SCB_EnableDCache();
 
-    /* Initialize buffers */
-    for (int i = 0; i < BUFFERSIZE; i++) {
-        aTxBuffer[i] = i;
-        aRxBuffer[i] = 0;
+  /* MCU Configuration--------------------------------------------------------*/
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_USART1_UART_Init();
+  MX_XSPI2_Init();
+  /* USER CODE BEGIN 2 */
+  printf("XSPI Debug startet...\r\n");
+
+  /* Initialize buffers */
+  for (int i = 0; i < BUFFERSIZE; i++) {
+      aTxBuffer[i] = i;
+      aRxBuffer[i] = 0;
+  }
+
+  /* Switch to OPI DTR Mode */
+  XSPI_NOR_OctalDTRModeCfg(&hxspi2);
+
+  /* Optional: Basic Write/Read Test (erase/write/read via commands) */
+  XSPI_WriteEnable(&hxspi2);
+
+  /* Performance Test */
+  XSPI_PerformanceTest();
+
+  /* ================= Memory-Mapped Mode Activation ================= */
+  printf("\n╔════════════════════════════════════════════════╗\n");
+  printf("║ XSPI Memory-Mapped Mode Initialization        ║\n");
+  printf("╚════════════════════════════════════════════════╝\n");
+
+  /* READ configuration (Octal IO DTR) */
+  XSPI_RegularCmdTypeDef sRead = {0};
+  sRead.OperationType        = HAL_XSPI_OPTYPE_READ_CFG;
+  sRead.Instruction          = OCTAL_IO_DTR_READ_CMD;
+  sRead.InstructionMode      = HAL_XSPI_INSTRUCTION_8_LINES;
+  sRead.InstructionWidth     = HAL_XSPI_INSTRUCTION_16_BITS;
+  sRead.InstructionDTRMode   = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+  sRead.AddressMode          = HAL_XSPI_ADDRESS_8_LINES;
+  sRead.AddressWidth         = HAL_XSPI_ADDRESS_32_BITS;
+  sRead.AddressDTRMode       = HAL_XSPI_ADDRESS_DTR_ENABLE;
+  sRead.DataMode             = HAL_XSPI_DATA_8_LINES;
+  sRead.DataDTRMode          = HAL_XSPI_DATA_DTR_ENABLE;
+  sRead.DummyCycles          = DUMMY_CLOCK_CYCLES_READ_OCTAL;   // passend zum Flash @200MHz
+  sRead.DQSMode              = HAL_XSPI_DQS_ENABLE;
+  sRead.AlternateBytesMode   = HAL_XSPI_ALT_BYTES_NONE;
+
+  if (HAL_XSPI_Command(&hxspi2, &sRead, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+      printf("✗ READ-CFG failed (err=0x%08lX)\r\n", hxspi2.ErrorCode);
+      Error_Handler();
+  }
+  printf("✓ READ-CFG set\r\n");
+
+  /* WRITE configuration (Page Program) — auch setzen, selbst wenn MMAP nur Lesen nutzt */
+  XSPI_RegularCmdTypeDef sWrite = {0};
+  sWrite.OperationType       = HAL_XSPI_OPTYPE_WRITE_CFG;
+  sWrite.Instruction         = OCTAL_PAGE_PROG_CMD;
+  sWrite.InstructionMode     = HAL_XSPI_INSTRUCTION_8_LINES;
+  sWrite.InstructionWidth    = HAL_XSPI_INSTRUCTION_16_BITS;
+  sWrite.InstructionDTRMode  = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+  sWrite.AddressMode         = HAL_XSPI_ADDRESS_8_LINES;
+  sWrite.AddressWidth        = HAL_XSPI_ADDRESS_32_BITS;
+  sWrite.AddressDTRMode      = HAL_XSPI_ADDRESS_DTR_ENABLE;
+  sWrite.DataMode            = HAL_XSPI_DATA_8_LINES;
+  sWrite.DataDTRMode         = HAL_XSPI_DATA_DTR_ENABLE;
+  sWrite.DummyCycles         = 0;
+  sWrite.DQSMode             = HAL_XSPI_DQS_DISABLE;
+  sWrite.AlternateBytesMode  = HAL_XSPI_ALT_BYTES_NONE;
+
+  if (HAL_XSPI_Command(&hxspi2, &sWrite, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+      printf("✗ WRITE-CFG failed (err=0x%08lX)\r\n", hxspi2.ErrorCode);
+      Error_Handler();
+  }
+  printf("✓ WRITE-CFG set\r\n");
+
+  /* Enter Memory-Mapped mode (mit Timeout-Zähler) */
+  XSPI_MemoryMappedTypeDef sMMAP = {0};
+  sMMAP.TimeOutActivation  = HAL_XSPI_TIMEOUT_COUNTER_ENABLE;
+  sMMAP.TimeoutPeriodClock = 0x50; // unkritisch; bei Bedarf feiner einstellen
+
+  if (HAL_XSPI_MemoryMapped(&hxspi2, &sMMAP) != HAL_OK) {
+      printf("✗ HAL_XSPI_MemoryMapped failed (state=%d, err=0x%08lX)\r\n",
+             hxspi2.State, hxspi2.ErrorCode);
+      Error_Handler();
+  }
+  printf("✓ XSPI entered Memory-Mapped mode (state=%d)\r\n", hxspi2.State);
+
+  xspi_mmap_base =
+     (hxspi2.Instance == XSPI2) ? XSPI2_MMAP_BASE : XSPI1_MMAP_BASE;
+  uint32_t xspi_mmap_end  = xspi_mmap_base + XSPI_MMAP_SIZE - 1;
+  printf("MMAP base=0x%08lX..0x%08lX\r\n", (unsigned)xspi_mmap_base, (unsigned)xspi_mmap_end);
+
+
+  ARM_MPU_Region_t mpu_table[] = {
+    {
+      .RBAR = ARM_MPU_RBAR(xspi_mmap_base, ARM_MPU_SH_NON, 0, 1, 0), // AttrIdx=0, XN=0 (exec erlaubt)
+      .RLAR = ARM_MPU_RLAR(xspi_mmap_end, 0) // enable region with AttrIdx 0
     }
+  };
 
-    /* Switch to OPI DTR Mode */
-    XSPI_NOR_OctalDTRModeCfg(&hxspi2);
+  ARM_MPU_Disable();
+  ARM_MPU_SetMemAttr(0, ARM_MPU_ATTR(
+    ARM_MPU_ATTR_MEMORY_(1,0,1,0),  // Outer: WB/WA
+    ARM_MPU_ATTR_MEMORY_(1,0,1,0)   // Inner: WB/WA
+  ));
+  ARM_MPU_Load(0, mpu_table, 1);
+  ARM_MPU_Enable(MPU_CTRL_PRIVDEFENA_Msk);
+  __DSB(); __ISB();
+  printf("✓ MPU configured for XSPI @0x%08lX..0x%08lX\r\n", (unsigned)xspi_mmap_base, (unsigned)xspi_mmap_end);
 
-    /* Basic Write/Read Test (your existing code) */
-    XSPI_WriteEnable(&hxspi2);
 
-    // ... (dein Erase/Write/Read Test bleibt) ...
+  printf("\r\n=== Simple Memory Test (Direct) ===\r\n");
+  volatile uint8_t *flash_ptr = (uint8_t*)xspi_mmap_base;
+  printf("Reading first byte... ");
+  uint8_t first = flash_ptr[0];
+  printf("0x%02X\r\n", first);
 
-    /* Performance Test */
-    XSPI_PerformanceTest();
+  printf("First 16 bytes: ");
+  for (int i = 0; i < 16; i++) printf("%02X ", flash_ptr[i]);
+  printf("\r\n");
+  printf("Simple Memory Test complete.\r\n");
 
-    /* =================================================== */
-        /* Memory-Mapped Mode Activation                       */
-        /* =================================================== */
-        printf("\n╔════════════════════════════════════════════════╗\n");
-        printf("║ XSPI Memory-Mapped Mode Initialization        ║\n");
-        printf("╚════════════════════════════════════════════════╝\n");
+  /* Clock / diagnostics */
+  check_xspi_clock();
+  test_memory_mapped_detailed();
+  xspi_quick_status();
 
-        sCommand.OperationType      = HAL_XSPI_OPTYPE_READ_CFG;
-        sCommand.Instruction        = OCTAL_IO_DTR_READ_CMD;
-        sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
-        sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_16_BITS;
-        sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
-        sCommand.AddressMode        = HAL_XSPI_ADDRESS_8_LINES;
-        sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
-        sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
-        sCommand.DataMode           = HAL_XSPI_DATA_8_LINES;
-        sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
-        sCommand.DummyCycles        = DUMMY_CLOCK_CYCLES_READ_OCTAL;
-        sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
-        sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
+  printf("\n╔════════════════════════════════════════════════╗\n");
+  printf("║ Memory-Mapped Mode Ready!                     ║\n");
+  printf("╚════════════════════════════════════════════════╝\n");
+  printf("\n");
 
-        if (HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
-            printf("✗ XSPI Command failed!\n");
-            Error_Handler();
-        }
-
-        printf("✓ Memory-Mapped Read Command configured\n");
-
-        /* =================================================== */
-        /* CRITICAL: Configure MPU BEFORE accessing memory!   */
-        /* =================================================== */
-        printf("\n=== Configuring MPU (BEFORE Memory Access) ===\n");
-
-        ARM_MPU_Region_t mpu_table[] = {
-            {
-                .RBAR = ARM_MPU_RBAR(0x90000000UL, ARM_MPU_SH_NON, 0, 1, 0),
-                .RLAR = ARM_MPU_RLAR(0x90000000UL + (512UL * 1024UL * 1024UL) - 1UL, 0)
-            }
-        };
-
-        ARM_MPU_Disable();
-        ARM_MPU_SetMemAttr(0, ARM_MPU_ATTR(
-            ARM_MPU_ATTR_MEMORY_(1,0,1,0),
-            ARM_MPU_ATTR_MEMORY_(1,0,1,0)
-        ));
-        ARM_MPU_Load(0, mpu_table, 1);
-        ARM_MPU_Enable(MPU_CTRL_PRIVDEFENA_Msk);
-
-        printf("✓ MPU configured for XSPI region\n");
-
-        __DSB();
-        __ISB();
-
-        printf("✓ Memory barriers executed\n");
-
-        /* NOW it's safe to access memory */
-        printf("\n=== Simple Memory Test (Direct) ===\n");
-        volatile uint8_t *flash_ptr = (uint8_t*)0x90000000;
-
-        printf("Reading first byte... ");
-        uint8_t first_byte = flash_ptr[0];
-        printf("0x%02X ✓\n", first_byte);
-
-        printf("First 16 bytes: ");
-        for (int i = 0; i < 16; i++) {
-            printf("%02X ", flash_ptr[i]);
-        }
-        printf("\n");
-
-        /* Check configuration */
-        check_xspi_clock();
-
-        /* Detailed diagnostics */
-        test_memory_mapped_detailed();
-
-        /* Quick status summary */
-        xspi_quick_status();
-
-        printf("\n╔════════════════════════════════════════════════╗\n");
-        printf("║ Memory-Mapped Mode Ready!                     ║\n");
-        printf("╚════════════════════════════════════════════════╝\n");
-        printf("\n");
-
-    /* Continue with Helium benchmarks */
-    printf("Initializing Planck LUT...\n");
-    for (uint32_t i = 0; i < 65536; i++) {
-        planck_table[i] = (uint16_t)i;
-    }
+  /* ======== Helium Benchmarks Setup ======== */
   printf("Initializing Planck LUT...\n");
   for (uint32_t i = 0; i < 65536; i++) {
       planck_table[i] = (uint16_t)i;
@@ -847,7 +817,11 @@ int main(void)
       src_u16[i] = (uint16_t)((x * 16383) / HPIX);
       gain_u16[i] = gain_to_q15(1.0f);
   }
+  xspi_memory_mapped_speed_test();
 
+  printf("\n╔════════════════════════════════════════════════╗\n");
+  printf("║ Memory-Mapped Mode Ready!                     ║\n");
+  printf("╚════════════════════════════════════════════════╝\n");
   // Benchmark
   printf("\n=== Performance Benchmark ===\n");
   __DSB();
@@ -865,9 +839,9 @@ int main(void)
   uint32_t cyc_planck = (t2 - t1);
   uint32_t cyc_total = (t2 - t0);
 
-  printf("Gain/Offset: %u cycles (%u ms)\n", cyc_gain, cyc_gain / 600000);
-  printf("Planck LUT:  %u cycles (%u ms)\n", cyc_planck, cyc_planck / 600000);
-  printf("Total:       %u cycles (%u ms)\n", cyc_total, cyc_total / 600000);
+  printf("Gain/Offset: %u cycles (%u ms)\n", cyc_gain, CYCLES_TO_MS(cyc_gain));
+  printf("Planck LUT:  %u cycles (%u ms)\n", cyc_planck, CYCLES_TO_MS(cyc_planck));
+  printf("Total:       %u cycles (%u ms)\n", cyc_total, CYCLES_TO_MS(cyc_total));
   printf("FPS:         %u\n\n", 600000000 / cyc_total);
 
   // LED Test
@@ -881,7 +855,6 @@ int main(void)
   printf("LED OK!\n\n");
 
   printf("Starting continuous processing...\n");
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -1146,6 +1119,8 @@ PUTCHAR_PROTOTYPE
     return ch;
 }
 #endif
+
+/* === XSPI helpers (protected) ============================================ */
 static void XSPI_WriteEnable(XSPI_HandleTypeDef *hxspi)
 {
   XSPI_RegularCmdTypeDef  sCommand = {0};
@@ -1249,7 +1224,7 @@ static void XSPI_NOR_OctalDTRModeCfg(XSPI_HandleTypeDef *hxspi)
 
   sCommand.OperationType      = HAL_XSPI_OPTYPE_COMMON_CFG;
   sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_1_LINE;
-  sCommand.InstructionWidth    = HAL_XSPI_INSTRUCTION_8_BITS;
+  sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_8_BITS;
   sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_DISABLE;
   sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_DISABLE;
   sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
@@ -1259,7 +1234,6 @@ static void XSPI_NOR_OctalDTRModeCfg(XSPI_HandleTypeDef *hxspi)
   sConfig.MatchMode           = HAL_XSPI_MATCH_MODE_AND;
   sConfig.AutomaticStop       = HAL_XSPI_AUTOMATIC_STOP_ENABLE;
   sConfig.IntervalTime        = 0x10;
-
 
   /* Enable write operations */
   sCommand.Instruction = WRITE_ENABLE_CMD;
@@ -1277,7 +1251,7 @@ static void XSPI_NOR_OctalDTRModeCfg(XSPI_HandleTypeDef *hxspi)
 
   sCommand.Instruction    = READ_STATUS_REG_CMD;
   sCommand.DataMode       = HAL_XSPI_DATA_1_LINE;
-  sCommand.DataLength         = 1;
+  sCommand.DataLength     = 1;
 
   if (HAL_XSPI_Command(hxspi, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
   {
@@ -1290,12 +1264,11 @@ static void XSPI_NOR_OctalDTRModeCfg(XSPI_HandleTypeDef *hxspi)
   }
 
   /* Write Configuration register 2 (with Octal I/O SPI protocol) */
-  sCommand.Instruction = WRITE_CFG_REG_2_CMD;
-  sCommand.AddressMode = HAL_XSPI_ADDRESS_1_LINE;
+  sCommand.Instruction  = WRITE_CFG_REG_2_CMD;
+  sCommand.AddressMode  = HAL_XSPI_ADDRESS_1_LINE;
   sCommand.AddressWidth = HAL_XSPI_ADDRESS_32_BITS;
-  sCommand.Address = 0;
+  sCommand.Address      = 0;
   reg = 0x2;
-
 
   if (HAL_XSPI_Command(hxspi, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
   {
@@ -1320,10 +1293,285 @@ static void XSPI_NOR_OctalDTRModeCfg(XSPI_HandleTypeDef *hxspi)
   {
     Error_Handler();
   }
-
 }
 
+/* === Debug helpers (protected) =========================================== */
+void test_memory_mapped_detailed(void) {
+    printf("\n");
+    printf("╔════════════════════════════════════════╗\n");
+    printf("║ Memory-Mapped Access Detailed Debug   ║\n");
+    printf("╚════════════════════════════════════════╝\n");
 
+    // [1] XSPI Handle Status
+    printf("\n[1] XSPI2 HAL Handle Status:\n");
+    printf("  Handle State: ");
+    switch(hxspi2.State) {
+        case HAL_XSPI_STATE_RESET:
+            printf("RESET\n"); break;
+        case HAL_XSPI_STATE_READY:
+            printf("READY\n"); break;
+        case HAL_XSPI_STATE_BUSY_CMD:
+            printf("BUSY_CMD\n"); break;
+        case HAL_XSPI_STATE_BUSY_TX:
+            printf("BUSY_TX\n"); break;
+        case HAL_XSPI_STATE_BUSY_RX:
+            printf("BUSY_RX\n"); break;
+        case HAL_XSPI_STATE_BUSY_AUTO_POLLING:
+            printf("BUSY_AUTO_POLLING\n"); break;
+        case HAL_XSPI_STATE_BUSY_MEM_MAPPED:
+            printf("BUSY_MEM_MAPPED ✓\n"); break;
+        case HAL_XSPI_STATE_ABORT:
+            printf("ABORT\n"); break;
+        case HAL_XSPI_STATE_ERROR:
+            printf("ERROR ✗\n"); break;
+        default:
+            printf("UNKNOWN (%d)\n", hxspi2.State); break;
+    }
+
+    printf("  Error Code: 0x%08lX", hxspi2.ErrorCode);
+    if (hxspi2.ErrorCode == HAL_XSPI_ERROR_NONE) {
+        printf(" (No Error)\n");
+    } else {
+        printf("\n");
+        if (hxspi2.ErrorCode & HAL_XSPI_ERROR_TIMEOUT)  printf("    - TIMEOUT\n");
+        if (hxspi2.ErrorCode & HAL_XSPI_ERROR_TRANSFER) printf("    - TRANSFER ERROR\n");
+        if (hxspi2.ErrorCode & HAL_XSPI_ERROR_DMA)      printf("    - DMA ERROR\n");
+    }
+
+    // [2] Configuration Summary
+    printf("\n[2] XSPI Configuration:\n");
+    printf("  Memory Type: ");
+    switch(hxspi2.Init.MemoryType) {
+        case HAL_XSPI_MEMTYPE_MICRON:   printf("Micron\n"); break;
+        case HAL_XSPI_MEMTYPE_MACRONIX: printf("Macronix ✓\n"); break;
+        case HAL_XSPI_MEMTYPE_APMEM:    printf("AP Memory\n"); break;
+        default:                        printf("Unknown\n"); break;
+    }
+
+    printf("  Memory Size: %lu\n", hxspi2.Init.MemorySize);
+    printf("  Clock Prescaler: %lu (÷%lu)\n",
+           hxspi2.Init.ClockPrescaler,
+           hxspi2.Init.ClockPrescaler + 1);
+    printf("  Chip Select High Time: %lu cycles\n",
+           hxspi2.Init.ChipSelectHighTimeCycle);
+    printf("  Free Running Clock: %s\n",
+           hxspi2.Init.FreeRunningClock == HAL_XSPI_FREERUNCLK_ENABLE ? "YES" : "NO");
+
+    // [3] Try Memory Access
+    printf("\n[3] Attempting Memory Access:\n");
+    printf("  Base Address: 0x70000000\n");
+
+    SCB->SHCSR |= SCB_SHCSR_USGFAULTENA_Msk;
+
+    volatile uint32_t *test_addr = (uint32_t*)xspi_mmap_base;
+    volatile uint32_t dummy = 0;
+
+    printf("  Reading first word... ");
+    __disable_irq();
+    dummy = *test_addr;
+    __enable_irq();
+    printf("0x%08lX\n", dummy);
+
+    printf("  Reading first 16 bytes:\n    ");
+    for (int i = 0; i < 4; i++) {
+        printf("0x%08lX ", test_addr[i]);
+    }
+    printf("\n");
+
+    // [4] Data Pattern Analysis
+    printf("\n[4] Data Pattern Analysis (first 256 bytes):\n");
+
+    uint8_t all_ff = 1, all_00 = 1;
+    volatile uint8_t *byte_ptr = (uint8_t*)xspi_mmap_base;
+    uint32_t unique_bytes = 0;
+    uint8_t byte_count[256] = {0};
+
+    for (int i = 0; i < 256; i++) {
+        uint8_t val = byte_ptr[i];
+        if (val != 0xFF) all_ff = 0;
+        if (val != 0x00) all_00 = 0;
+
+        if (byte_count[val] == 0) unique_bytes++;
+        byte_count[val]++;
+    }
+
+    if (all_ff) {
+        printf("  Status: All 0xFF (Flash empty/erased)\n");
+    } else if (all_00) {
+        printf("  Status: All 0x00 (Likely read error)\n");
+    } else {
+        printf("  Status: Contains data pattern\n");
+        printf("  Unique bytes: %lu / 256\n", unique_bytes);
+
+        printf("  First values: ");
+        int shown = 0;
+        for (int i = 0; i < 32 && shown < 8; i++) {
+            if (byte_ptr[i] != 0x00 && byte_ptr[i] != 0xFF) {
+                printf("0x%02X ", byte_ptr[i]);
+                shown++;
+            }
+        }
+        printf("\n");
+    }
+
+    // [5] MPU Status
+    printf("\n[5] MPU Status:\n");
+    if (MPU->CTRL & MPU_CTRL_ENABLE_Msk) {
+        printf("  MPU is ENABLED\n");
+        printf("  Checking regions:\n");
+        for (int region = 0; region < 8; region++) {
+            MPU->RNR = region;
+            uint32_t rbar = MPU->RBAR;
+            uint32_t rlar = MPU->RLAR;
+
+            if (rlar & MPU_RLAR_EN_Msk) {
+                uint32_t base = rbar & 0xFFFFFFE0;
+                printf("    Region %d: Base=0x%08lX ", region, base);
+                if (base == xspi_mmap_base) {
+                    printf("✓ (Covers XSPI)\n");
+                } else {
+                    printf("\n");
+                }
+            }
+        }
+    } else {
+        printf("  MPU is DISABLED\n");
+    }
+
+    // [6] Cache Status
+    printf("\n[6] Cache Status:\n");
+    if (SCB->CCR & SCB_CCR_IC_Msk) {
+        printf("  I-Cache: ENABLED\n");
+    } else {
+        printf("  I-Cache: DISABLED\n");
+    }
+    if (SCB->CCR & SCB_CCR_DC_Msk) {
+        printf("  D-Cache: ENABLED\n");
+    } else {
+        printf("  D-Cache: DISABLED\n");
+    }
+
+    printf("\n");
+    printf("╔════════════════════════════════════════╗\n");
+    printf("║ Debug Analysis Complete                ║\n");
+    printf("╚════════════════════════════════════════╝\n");
+}
+
+void check_xspi_clock(void) {
+    printf("\n=== XSPI Clock Configuration ===\n");
+
+    uint32_t xspi_clk = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_XSPI2);
+    uint32_t xspi_clk_mhz = xspi_clk / 1000000;
+    uint32_t xspi_clk_khz = (xspi_clk / 1000) % 1000;
+
+    printf("  XSPI2 Kernel Clock: %lu Hz (%lu.%03lu MHz)\n",
+           xspi_clk, xspi_clk_mhz, xspi_clk_khz);
+
+    if (xspi_clk < 190000000 || xspi_clk > 210000000) {
+        printf("  WARNING: Clock not optimal for OPI DTR!\n");
+        printf("    Current: %lu MHz\n", xspi_clk_mhz);
+        printf("    Recommended: 200 MHz\n");
+    } else {
+        printf("  ✓ Clock in optimal range (190-210 MHz)\n");
+    }
+
+    uint32_t prescaler = hxspi2.Init.ClockPrescaler;
+    printf("  Prescaler: %lu (Divider: %lu)\n", prescaler, prescaler + 1);
+
+    uint32_t flash_clk = xspi_clk / (prescaler + 1);
+    uint32_t flash_clk_mhz = flash_clk / 1000000;
+    uint32_t flash_clk_khz = (flash_clk / 1000) % 1000;
+
+    printf("  Effective Flash Clock: %lu.%03lu MHz\n",
+           flash_clk_mhz, flash_clk_khz);
+
+    uint32_t theoretical_bandwidth = (flash_clk_mhz * 16);
+    printf("  Theoretical Bandwidth: %lu MB/s (OPI DTR)\n", theoretical_bandwidth);
+    printf("  (Practical: ~50%% = %lu MB/s due to overhead)\n", theoretical_bandwidth / 2);
+}
+
+void xspi_quick_status(void) {
+    printf("\n=== XSPI2 Quick Status ===\n");
+
+    printf("HAL State: ");
+    if (hxspi2.State == HAL_XSPI_STATE_BUSY_MEM_MAPPED) {
+        printf("Memory-Mapped Mode Active ✓\n");
+    } else {
+        printf("NOT in Memory-Mapped Mode ✗ (State=%d)\n", hxspi2.State);
+    }
+
+    if (hxspi2.ErrorCode != HAL_XSPI_ERROR_NONE) {
+        printf("ERROR: 0x%08lX\n", hxspi2.ErrorCode);
+    }
+
+    printf("\nMemory Test: ");
+    volatile uint32_t *test = (uint32_t*)xspi_mmap_base;
+    uint32_t val = *test;
+    printf("0x%08lX", val);
+
+    if (val == 0xFFFFFFFF) {
+        printf(" (Empty Flash)\n");
+    } else if (val == 0x00000000) {
+        printf(" (Read Error?)\n");
+    } else {
+        printf(" (Has Data) ✓\n");
+    }
+
+    uint32_t clk = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_XSPI2);
+    printf("\nClock: %lu MHz\n", clk / 1000000);
+}
+
+void xspi_print_all_registers(void) {
+    printf("\n╔════════════════════════════════════════╗\n");
+    printf("║ XSPI2 Register Dump                    ║\n");
+    printf("╚════════════════════════════════════════╝\n");
+
+    XSPI_TypeDef *xspi = hxspi2.Instance;
+
+    if (xspi == NULL) {
+        printf("ERROR: XSPI2 instance is NULL!\n");
+        return;
+    }
+
+    printf("\nControl Registers:\n");
+    printf("  CR   = 0x%08lX\n", xspi->CR);
+    printf("  DCR1 = 0x%08lX\n", xspi->DCR1);
+    printf("  DCR2 = 0x%08lX\n", xspi->DCR2);
+    printf("  DCR3 = 0x%08lX\n", xspi->DCR3);
+
+    printf("\nStatus:\n");
+    printf("  SR   = 0x%08lX\n", xspi->SR);
+    printf("  Flags: ");
+    if (xspi->SR & XSPI_SR_BUSY) printf("[BUSY] ");
+    if (xspi->SR & XSPI_SR_TOF)  printf("[TIMEOUT] ");
+    if (xspi->SR & XSPI_SR_TEF)  printf("[ERROR] ");
+    if (xspi->SR & XSPI_SR_TCF)  printf("[COMPLETE] ");
+    if (xspi->SR == 0) printf("(idle)");
+    printf("\n");
+
+    printf("\nCommand Configuration:\n");
+    printf("  CCR  = 0x%08lX\n", xspi->CCR);
+    printf("  TCR  = 0x%08lX\n", xspi->TCR);
+    printf("  IR   = 0x%08lX\n", xspi->IR);
+
+    printf("\nDecoded Configuration:\n");
+    uint32_t devsize = (xspi->DCR1 & XSPI_DCR1_DEVSIZE) >> XSPI_DCR1_DEVSIZE_Pos;
+    uint32_t mem_size_mb = (1UL << (devsize + 1)) / (1024 * 1024);
+    printf("  Device Size: 2^%lu = %lu MB\n", devsize + 1, mem_size_mb);
+
+    uint32_t prescaler = (xspi->DCR2 & XSPI_DCR2_PRESCALER) >> XSPI_DCR2_PRESCALER_Pos;
+    printf("  Prescaler: %lu (Divider: %lu)\n", prescaler, prescaler + 1);
+
+    uint32_t mtyp = (xspi->DCR1 & XSPI_DCR1_MTYP) >> XSPI_DCR1_MTYP_Pos;
+    printf("  Memory Type: ");
+    switch(mtyp) {
+        case 0: printf("Micron\n"); break;
+        case 1: printf("Macronix\n"); break;
+        case 2: printf("Standard\n"); break;
+        case 3: printf("AP Memory\n"); break;
+        default: printf("Unknown\n"); break;
+    }
+}
 /* USER CODE END 4 */
 
 /**
