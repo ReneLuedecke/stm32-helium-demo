@@ -8,17 +8,35 @@
 #include <stdio.h>
 
 /* ===== Initialization ===== */
+//void XSPI_NOR_Init_All(void)
+//{
+//	BSP_XSPI_NOR_Init_t init;
+//
+//	printf("Initializing XSPI2 NOR Flash (Octal DTR Mode)...\n");
+//
+//	/* Configure for Octal DTR mode */
+//	init.InterfaceMode = BSP_XSPI_NOR_OPI_MODE;
+//	init.TransferRate = BSP_XSPI_NOR_DTR_TRANSFER;
+//
+//	/* Initialize XSPI with BSP function */
+//	if (BSP_XSPI_NOR_Init(0, &init) != BSP_ERROR_NONE) {
+//		printf("ERROR: XSPI NOR initialization failed\n");
+//		Error_Handler();
+//	}
+//
+//	printf("XSPI2 NOR Flash initialized successfully!\n");
+//}
+
 void XSPI_NOR_Init_All(void)
 {
     BSP_XSPI_NOR_Init_t init;
     
-    printf("Initializing XSPI2 NOR Flash (Octal DTR Mode)...\n");
+    printf("Initializing XSPI2 NOR Flash (SPI Mode for testing)...\n");
     
-    /* Configure for Octal DTR mode */
-    init.InterfaceMode = BSP_XSPI_NOR_OPI_MODE;
-    init.TransferRate = BSP_XSPI_NOR_DTR_TRANSFER;
+    /* Test mit SPI-Mode statt Octal DTR */
+    init.InterfaceMode = BSP_XSPI_NOR_SPI_MODE;    // SPI statt OPI
+    init.TransferRate = BSP_XSPI_NOR_STR_TRANSFER; // STR statt DTR
     
-    /* Initialize XSPI with BSP function */
     if (BSP_XSPI_NOR_Init(0, &init) != BSP_ERROR_NONE) {
         printf("ERROR: XSPI NOR initialization failed\n");
         Error_Handler();
