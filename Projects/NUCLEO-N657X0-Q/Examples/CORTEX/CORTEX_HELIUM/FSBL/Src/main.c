@@ -111,6 +111,10 @@ int iar_fputc(int ch);
 //}
 void XSPI_PerformanceTest(void)
 {
+    // Nutze temp_u16 als Test-Buffer (ist schon im RAM!)
+    uint8_t *test_tx = (uint8_t*)temp_u16;
+    uint8_t *test_rx = (uint8_t*)dst_u16;
+
     printf("\n================================================\n");
     printf("  XSPI NOR FLASH PERFORMANCE TESTS\n");
     printf("================================================\n\n");
@@ -118,25 +122,32 @@ void XSPI_PerformanceTest(void)
     XSPI_RegularCmdTypeDef sCommand = {0};
     uint32_t cycles_start, cycles_end, cycles_elapsed;
     uint32_t test_sizes[] = {256, 512, 1024, 4096};
+    uint32_t test_addresses[] = {0x0000, 0x1000, 0x2000, 0x3000};
     int test_idx;
 
-    printf("Clock: 600 MHz (1 cycle = 1.67ns)\n");
-    printf("Buffer location: AXISRAM1\n\n");
+    printf("Clock: 600 MHz\n");
+    printf("Buffer: Reusing temp_u16/dst_u16\n");
+    printf("Mode: OPI DTR (8-line DDR)\n\n");
 
-    /* Test 1: Sequential Write Performance */
-    printf("TEST 1: Sequential Write Performance\n");
-    printf("------------------------------------\n");
+    /* ==================== TEST 1: WRITE ==================== */
+    printf("TEST 1: Write Performance\n");
+    printf("-------------------------\n");
 
     for (test_idx = 0; test_idx < 4; test_idx++) {
-        uint32_t size = test_sizes[test_idx];
+        printf("[DEBUG] Test %d starting...\n", test_idx);
 
-        /* Prepare data */
+        uint32_t size = test_sizes[test_idx];
+        uint32_t addr = test_addresses[test_idx];
+
+        printf("[DEBUG] Preparing %u bytes...\n", size);
         for (uint32_t i = 0; i < size; i++) {
-            aTxBuffer[i] = (uint8_t)(i & 0xFF);
+            test_tx[i] = (uint8_t)(i & 0xFF);
         }
 
-        /* Erase sector first */
+        printf("[DEBUG] Write Enable...\n");
         XSPI_WriteEnable(&hxspi2);
+
+        printf("[DEBUG] Erasing sector @ 0x%04X...\n", addr);
         sCommand.OperationType      = HAL_XSPI_OPTYPE_COMMON_CFG;
         sCommand.Instruction        = OCTAL_SECTOR_ERASE_CMD;
         sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
@@ -146,98 +157,168 @@ void XSPI_PerformanceTest(void)
         sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
         sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
         sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
-        sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
         sCommand.DataMode           = HAL_XSPI_DATA_NONE;
-        sCommand.Address            = 0;
+        sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
+        sCommand.Address            = addr;
         sCommand.DummyCycles        = 0;
         sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
-        HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+
+        if (HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+            printf("[ERROR] Erase command failed!\n");
+            return;
+        }
+
+        printf("[DEBUG] Waiting for erase...\n");
         XSPI_AutoPollingMemReady(&hxspi2);
 
-        /* Write Enable */
-        XSPI_WriteEnable(&hxspi2);
+        // Multi-Page Programming (256 bytes per page)
+        printf("[DEBUG] Programming %u bytes in pages...\n", size);
 
-        /* Measure write time */
-        sCommand.Instruction = OCTAL_PAGE_PROG_CMD;
-        sCommand.DataMode    = HAL_XSPI_DATA_8_LINES;
-        sCommand.DataLength  = size;
-        sCommand.Address     = 0;
-
-        HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
-
-        /* Start timer */
         DWT->CTRL |= 1;
         cycles_start = DWT->CYCCNT;
 
-        HAL_XSPI_Transmit(&hxspi2, aTxBuffer, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+        uint32_t bytes_written = 0;
+        while (bytes_written < size) {
+            uint32_t page_size = (size - bytes_written) > 256 ? 256 : (size - bytes_written);
+            uint32_t page_addr = addr + bytes_written;
+
+            XSPI_WriteEnable(&hxspi2);
+
+            sCommand.Instruction = OCTAL_PAGE_PROG_CMD;
+            sCommand.DataMode    = HAL_XSPI_DATA_8_LINES;
+            sCommand.DataLength  = page_size;
+            sCommand.Address     = page_addr;
+
+            if (HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+                printf("[ERROR] Program command failed at 0x%04X!\n", page_addr);
+                return;
+            }
+
+            if (HAL_XSPI_Transmit(&hxspi2, &test_tx[bytes_written], HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+                printf("[ERROR] Transmit failed at 0x%04X!\n", page_addr);
+                return;
+            }
+
+            XSPI_AutoPollingMemReady(&hxspi2);
+
+            bytes_written += page_size;
+        }
 
         cycles_end = DWT->CYCCNT;
         cycles_elapsed = cycles_end - cycles_start;
 
-        XSPI_AutoPollingMemReady(&hxspi2);
+        uint32_t kbps = (size * 600) / cycles_elapsed;
 
-        uint32_t bandwidth_kbps = (size * 600000) / (cycles_elapsed / 1000);
-        printf("  %u bytes:  %u cycles (%u ms) = %u KB/s\n",
-               size, cycles_elapsed, CYCLES_TO_MS(cycles_elapsed), bandwidth_kbps / 1024);
+        printf("  %4u bytes: %6u cycles (%4u us) = %5u KB/s (%u pages)\n",
+               size, cycles_elapsed, CYCLES_TO_US(cycles_elapsed), kbps,
+               (size + 255) / 256);
     }
 
-    printf("\n");
+    printf("\n[DEBUG] Write tests complete\n");
 
-    /* Test 2: Sequential Read Performance */
-    printf("TEST 2: Sequential Read Performance\n");
-    printf("-----------------------------------\n");
+    /* ==================== TEST 2: READ ==================== */
+    printf("\nTEST 2: Read Performance\n");
+    printf("------------------------\n");
 
     for (test_idx = 0; test_idx < 4; test_idx++) {
-        uint32_t size = test_sizes[test_idx];
+        printf("[DEBUG] Test %d starting...\n", test_idx);
 
+        uint32_t size = test_sizes[test_idx];
+        uint32_t addr = test_addresses[test_idx];
+
+        printf("[DEBUG] Reading %u bytes from 0x%04X...\n", size, addr);
+
+        sCommand.OperationType      = HAL_XSPI_OPTYPE_COMMON_CFG;
         sCommand.Instruction        = OCTAL_IO_DTR_READ_CMD;
         sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
         sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_16_BITS;
         sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
-        sCommand.Address            = 0;
         sCommand.AddressMode        = HAL_XSPI_ADDRESS_8_LINES;
         sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
         sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
         sCommand.DataMode           = HAL_XSPI_DATA_8_LINES;
         sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
+        sCommand.Address            = addr;
         sCommand.DataLength         = size;
         sCommand.DummyCycles        = DUMMY_CLOCK_CYCLES_READ_OCTAL;
         sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
+        sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
 
-        HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+        if (HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+            printf("[ERROR] Read command failed!\n");
+            return;
+        }
 
-        /* Start timer */
         cycles_start = DWT->CYCCNT;
 
-        HAL_XSPI_Receive(&hxspi2, aRxBuffer, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+        if (HAL_XSPI_Receive(&hxspi2, test_rx, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+            printf("[ERROR] Receive failed!\n");
+            return;
+        }
 
         cycles_end = DWT->CYCCNT;
         cycles_elapsed = cycles_end - cycles_start;
 
-        uint32_t bandwidth_kbps = (size * 600000) / (cycles_elapsed / 1000);
-        printf("  %u bytes:  %u cycles (%u ms) = %u KB/s\n",
-               size, cycles_elapsed, CYCLES_TO_MS(cycles_elapsed), bandwidth_kbps / 1024);
+        uint32_t kbps = (size * 600) / cycles_elapsed;
+
+        printf("  %4u bytes: %6u cycles (%4u us) = %5u KB/s\n",
+               size, cycles_elapsed, CYCLES_TO_US(cycles_elapsed), kbps);
+    }
+
+    printf("\n[DEBUG] Read tests complete\n");
+
+    /* ==================== TEST 3: VERIFY ==================== */
+    printf("\nTEST 3: Data Integrity\n");
+    printf("----------------------\n");
+
+    uint32_t total_errors = 0;
+
+    for (test_idx = 0; test_idx < 4; test_idx++) {
+        uint32_t size = test_sizes[test_idx];
+        uint32_t addr = test_addresses[test_idx];
+        uint32_t errors = 0;
+
+        printf("[DEBUG] Verifying %u bytes from 0x%04X...\n", size, addr);
+
+        sCommand.OperationType      = HAL_XSPI_OPTYPE_COMMON_CFG;
+        sCommand.Instruction        = OCTAL_IO_DTR_READ_CMD;
+        sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
+        sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_16_BITS;
+        sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+        sCommand.AddressMode        = HAL_XSPI_ADDRESS_8_LINES;
+        sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
+        sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
+        sCommand.DataMode           = HAL_XSPI_DATA_8_LINES;
+        sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
+        sCommand.Address            = addr;
+        sCommand.DataLength         = size;
+        sCommand.DummyCycles        = DUMMY_CLOCK_CYCLES_READ_OCTAL;
+        sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
+        sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
+
+        HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+        HAL_XSPI_Receive(&hxspi2, test_rx, HAL_XSPI_TIMEOUT_DEFAULT_VALUE);
+
+        for (uint32_t i = 0; i < size; i++) {
+            if (test_rx[i] != (uint8_t)(i & 0xFF)) {
+                errors++;
+                if (errors <= 3) {
+                    printf("  [ERROR] Byte %u: expected 0x%02X, got 0x%02X\n",
+                           i, (uint8_t)(i & 0xFF), test_rx[i]);
+                }
+            }
+        }
+
+        total_errors += errors;
+        printf("  %4u bytes: %s\n", size, errors ? "FAIL" : "PASS");
     }
 
     printf("\n");
 
-    /* Test 3: Verify data integrity */
-    printf("TEST 3: Data Integrity Verification\n");
-    printf("------------------------------------\n");
-
-    int errors = 0;
-    for (uint32_t i = 0; i < BUFFERSIZE; i++) {
-        if (aRxBuffer[i] != aTxBuffer[i]) {
-            errors++;
-        }
-    }
-
-    if (errors == 0) {
-        printf("  All %u bytes verified: PASS\n", BUFFERSIZE);
-
+    if (total_errors == 0) {
+        printf("  *** ALL TESTS PASSED ***\n");
     } else {
-        printf("  FAIL: %d byte errors\n", errors);
-
+        printf("  *** TESTS FAILED: %u errors ***\n", total_errors);
     }
 
     printf("\n================================================\n");
@@ -432,21 +513,98 @@ int main(void)
       Error_Handler();
     }
 
-    /* Result comparison -------------------------------------------------------- */
-      for (int i = 0; i < BUFFERSIZE; i++)
-      {
-        if (aRxBuffer[i] != aTxBuffer[i])
-        {
-          /* Turn LED_RED on */
-          //BSP_LED_On(LED_RED);
-          //errorBuffer++;
+    /* Result comparison */
+    for (int i = 0; i < BUFFERSIZE; i++) {
+        if (aRxBuffer[i] != aTxBuffer[i]) {
+            // error
         }
-      }
-      XSPI_PerformanceTest();
-    /* DeInit XSPI */
+    }
+
+    printf("\n[DEBUG] Basic test complete, reinitializing for performance test...\n");
+
+    // WICHTIG: XSPI neu initialisieren!
     HAL_XSPI_DeInit(&hxspi2);
+    HAL_Delay(10);
+    MX_XSPI2_Init();
+    HAL_Delay(10);
+    XSPI_NOR_OctalDTRModeCfg(&hxspi2);
 
+    printf("[DEBUG] XSPI reinitialized\n");
+     XSPI_PerformanceTest();
+    /* DeInit XSPI */
+   // HAL_XSPI_DeInit(&hxspi2);
 
+    // Nach dem Performance Test, vor der main loop
+    printf("\n=== Activating Memory-Mapped Mode ===\n");
+
+    //XSPI_RegularCmdTypeDef sCommand = {0};
+
+    sCommand.OperationType      = HAL_XSPI_OPTYPE_READ_CFG;
+    sCommand.Instruction        = OCTAL_IO_DTR_READ_CMD;
+    sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
+    sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_16_BITS;
+    sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+    sCommand.AddressMode        = HAL_XSPI_ADDRESS_8_LINES;
+    sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
+    sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
+    sCommand.DataMode           = HAL_XSPI_DATA_8_LINES;
+    sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
+    sCommand.DummyCycles        = DUMMY_CLOCK_CYCLES_READ_OCTAL;
+    sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
+    sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
+
+    if (HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+        Error_Handler();
+    }
+
+    printf("✓ Memory-Mapped Mode active!\n");
+    printf("✓ Flash accessible at 0x90000000\n\n");
+
+    /* Configure MPU for XSPI Memory-Mapped region (Cortex-M55 style) */
+    printf("Configuring MPU for flash access...\n");
+
+    ARM_MPU_Region_t mpu_table[] = {
+        {
+            // Region 0: XSPI Memory-Mapped (0x90000000 - 512MB)
+            .RBAR = ARM_MPU_RBAR(0x90000000UL,
+                                  ARM_MPU_SH_NON,
+                                  0,  // Read-Only = 0 (Read-Write)
+                                  1,  // Non-Privileged = 1
+                                  0), // Execute Never = 0 (Allow Execute)
+            .RLAR = ARM_MPU_RLAR(0x90000000UL + (512UL * 1024UL * 1024UL) - 1UL,
+                                  0)  // AttrIdx = 0 (Normal memory, Cacheable)
+        }
+    };
+
+    // Disable MPU
+    ARM_MPU_Disable();
+
+    // Configure memory attributes
+    // Attr0: Normal memory, Write-back, Read-allocate, Write-allocate
+    ARM_MPU_SetMemAttr(0, ARM_MPU_ATTR(
+        ARM_MPU_ATTR_MEMORY_(1,0,1,0),  // Outer: Write-Back, Read-Allocate
+        ARM_MPU_ATTR_MEMORY_(1,0,1,0)   // Inner: Write-Back, Read-Allocate
+    ));
+
+    // Load MPU regions
+    ARM_MPU_Load(0, mpu_table, 1);
+
+    // Enable MPU with default memory map
+    ARM_MPU_Enable(MPU_CTRL_PRIVDEFENA_Msk);
+
+    printf("✓ MPU configured\n\n");
+
+    /* NOW Test: Direct memory read */
+    __DSB();
+    __ISB();
+
+    volatile uint8_t *flash_ptr = (uint8_t*)0x90000000;
+    printf("First 16 bytes from flash:\n");
+    for (int i = 0; i < 16; i++) {
+        printf("%02X ", flash_ptr[i]);
+    }
+    printf("\n\n");
+    printf("\n\n");
   // Initialize Planck LUT
   printf("Initializing Planck LUT...\n");
   for (uint32_t i = 0; i < 65536; i++) {
