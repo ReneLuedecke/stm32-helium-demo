@@ -156,19 +156,62 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
 void HAL_XSPI_MspInit(XSPI_HandleTypeDef* hxspi)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
+    RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
 
     if(hxspi->Instance == XSPI2)
     {
+        /* ===== 1. CLOCKS AKTIVIEREN ===== */
         __HAL_RCC_XSPI2_CLK_ENABLE();
         __HAL_RCC_XSPIM_CLK_ENABLE();
+        __HAL_RCC_GPION_CLK_ENABLE();
 
-        // GPIO Clock aktivieren
-        __HAL_RCC_GPIOC_CLK_ENABLE();
-        __HAL_RCC_GPIOD_CLK_ENABLE();
-        __HAL_RCC_GPIOE_CLK_ENABLE();
+        /* ===== 2. RESET XSPI2 & XSPIM ===== */
+        __HAL_RCC_XSPI2_FORCE_RESET();
+        __HAL_RCC_XSPIM_FORCE_RESET();
+        HAL_Delay(1);
+        __HAL_RCC_XSPI2_RELEASE_RESET();
+        __HAL_RCC_XSPIM_RELEASE_RESET();
+        HAL_Delay(1);
 
-        // GPIO konfigurieren
-        // Datenlinien DQ0-DQ7, CLK, NCS auf Alternate Function setzen
+        /* ===== 3. PERIPHERAL CLOCK CONFIG ===== */
+        PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_XSPI2;
+        PeriphClkInitStruct.Xspi2ClockSelection = RCC_XSPI2CLKSOURCE_HCLK;
+        if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+        {
+            Error_Handler();
+        }
+
+        /* ===== 4. VDDIO3 POWER ENABLE ===== */
+        __HAL_RCC_PWR_CLK_ENABLE();
+        HAL_PWREx_EnableVddIO3();
+        HAL_PWREx_ConfigVddIORange(PWR_VDDIO3, PWR_VDDIO_RANGE_1V8);
+        HAL_Delay(10);  // Wait for voltage to stabilize!
+
+        /* ===== 5. GPIO CONFIGURATION ===== */
+        // CLK Pin (needs NOPULL)
+        GPIO_InitStruct.Pin = GPIO_PIN_6;
+        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+        GPIO_InitStruct.Pull = GPIO_NOPULL;
+        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+        GPIO_InitStruct.Alternate = GPIO_AF9_XSPIM_P2;
+        HAL_GPIO_Init(GPION, &GPIO_InitStruct);
+
+        // CS Pin (needs PULLUP)
+        GPIO_InitStruct.Pin = GPIO_PIN_1;
+        GPIO_InitStruct.Pull = GPIO_PULLUP;
+        HAL_GPIO_Init(GPION, &GPIO_InitStruct);
+
+        // DQS Pin (needs NOPULL)
+        GPIO_InitStruct.Pin = GPIO_PIN_0;
+        GPIO_InitStruct.Pull = GPIO_NOPULL;
+        HAL_GPIO_Init(GPION, &GPIO_InitStruct);
+
+        // Data Pins DQ0-DQ7 (needs NOPULL)
+        GPIO_InitStruct.Pin = GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 |
+                              GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11;
+        GPIO_InitStruct.Pull = GPIO_NOPULL;
+        HAL_GPIO_Init(GPION, &GPIO_InitStruct);
     }
 }
+
 /* USER CODE END 1 */
