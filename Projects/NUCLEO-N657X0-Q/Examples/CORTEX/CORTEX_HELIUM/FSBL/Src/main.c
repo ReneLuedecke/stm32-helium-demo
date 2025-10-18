@@ -43,6 +43,16 @@
 #define XSPI2_MMAP_BASE   0x70000000UL
 #define XSPI_MMAP_SIZE    0x10000000UL  // 256 MB
 
+#define TIM2_PRESCALER  9999
+#define TIM2_PERIOD     799
+
+// Forward declarations
+extern TIM_HandleTypeDef htim2;
+
+void thermal_vsync_init(void);
+void thermal_vsync_start(void);
+void thermal_frame_process(void);
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -70,6 +80,15 @@ uint8_t aTxBuffer[BUFFERSIZE];
 __IO uint8_t aRxBuffer[BUFFERSIZE];
 
 uint32_t xspi_mmap_base = XSPI2_MMAP_BASE;
+
+TIM_HandleTypeDef htim2;
+
+// Thermal pipeline variables
+volatile uint32_t vsync_count = 0;
+volatile uint32_t frames_processed = 0;
+volatile uint8_t frame_ready = 0;
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -108,6 +127,116 @@ int iar_fputc(int ch);
 #endif
 #endif
 
+void thermal_vsync_init(void) {
+    TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+    TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+    // Enable TIM2 clock
+    __HAL_RCC_TIM2_CLK_ENABLE();
+
+    // Configure Timer2
+    htim2.Instance = TIM2;
+    htim2.Init.Prescaler = TIM2_PRESCALER;
+    htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim2.Init.Period = TIM2_PERIOD;
+    htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+
+    if (HAL_TIM_Base_Init(&htim2) != HAL_OK) {
+        printf("ERROR: Timer2 init failed!\n");
+        Error_Handler();
+    }
+
+    // Clock source configuration
+    sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+    if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK) {
+        Error_Handler();
+    }
+
+    // Master configuration
+    sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+    sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+    if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK) {
+        Error_Handler();
+    }
+
+    // Enable Timer2 interrupt
+    HAL_NVIC_SetPriority(TIM2_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(TIM2_IRQn);
+
+    printf("✓ Timer2 initialized: 50 Hz VSYNC\n");
+}
+
+void thermal_vsync_start(void) {
+    if (HAL_TIM_Base_Start_IT(&htim2) != HAL_OK) {
+        printf("ERROR: Timer2 start failed!\n");
+        Error_Handler();
+    }
+    printf("✓ Timer2 started\n");
+}
+
+void thermal_frame_process(void) {
+    // Placeholder - will be filled later
+    frames_processed++;
+
+    // Toggle LED to show activity
+    static uint8_t led_state = 0;
+    if (led_state) {
+        LED1_RESET();
+        led_state = 0;
+    } else {
+        LED1_SET();
+        led_state = 1;
+    }
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM2) {
+    vsync_count++;
+    frame_ready = 1;
+
+    // Process frame
+    thermal_frame_process();
+  }
+}
+/* USER CODE BEGIN 0 */
+
+// ... existing thermal functions ...
+
+void thermal_check_timer_clock(void) {
+    // Get actual APB1 timer clock
+    uint32_t apb1_clock = HAL_RCC_GetPCLK1Freq();
+    uint32_t tim_clock = apb1_clock;
+
+    // Check if APB1 prescaler > 1, then timer clock = 2 × APB1
+    RCC_ClkInitTypeDef clk_config;
+    uint32_t flash_latency;
+    HAL_RCC_GetClockConfig(&clk_config);
+
+    if (clk_config.APB1CLKDivider != RCC_APB1_DIV1) {
+        tim_clock = apb1_clock * 2;
+    }
+
+    printf("\n=== Timer Clock Debug ===\n");
+    printf("  APB1 Clock: %lu Hz (%lu MHz)\n", apb1_clock, apb1_clock / 1000000);
+    printf("  Timer Clock: %lu Hz (%lu MHz)\n", tim_clock, tim_clock / 1000000);
+    printf("  Current Prescaler: %lu\n", TIM2_PRESCALER);
+    printf("  Current Period: %lu\n", TIM2_PERIOD);
+
+    // Calculate actual frequency
+    uint32_t timer_freq = tim_clock / (TIM2_PRESCALER + 1) / (TIM2_PERIOD + 1);
+    printf("  Calculated Timer Freq: %lu Hz\n", timer_freq);
+    printf("  Target: 50 Hz\n");
+
+    // Calculate correct prescaler for 50 Hz
+    uint32_t correct_prescaler = (tim_clock / 10000) - 1;  // 10 kHz intermediate
+    printf("\n  RECOMMENDED Prescaler: %lu\n", correct_prescaler);
+    printf("  RECOMMENDED Period: 199\n");
+    printf("  This will give: %lu Hz\n", tim_clock / (correct_prescaler + 1) / 200);
+}
+
+/* USER CODE END 0 */
 void XSPI_PerformanceTest(void)
 {
     // Nutze temp_u16 als Test-Buffer (ist schon im RAM!)
@@ -844,6 +973,19 @@ int main(void)
   printf("Total:       %u cycles (%u ms)\n", cyc_total, CYCLES_TO_MS(cyc_total));
   printf("FPS:         %u\n\n", 600000000 / cyc_total);
 
+
+  	printf("\n");
+	printf("╔════════════════════════════════════════════════╗\n");
+	printf("║ Initializing 50 Hz Thermal Pipeline           ║\n");
+	printf("╚════════════════════════════════════════════════╝\n");
+
+	thermal_check_timer_clock();
+	thermal_vsync_init();
+	thermal_vsync_start();
+
+	printf("Pipeline ready! LED should blink at 50 Hz\n");
+	printf("\n");
+
   // LED Test
   printf("Testing LED...\n");
   for (int i = 0; i < 3; i++) {
@@ -860,7 +1002,8 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   uint8_t led_state = 0;
-
+  uint32_t last_stats = HAL_GetTick();
+  uint32_t last_frame_count = 0;
   while (1)
   {
     /* USER CODE END WHILE */
@@ -875,6 +1018,18 @@ int main(void)
     } else {
         LED1_SET();
         led_state = 1;
+    }
+    if (HAL_GetTick() - last_stats >= 5000) {
+          uint32_t frames = frames_processed - last_frame_count;
+          uint32_t fps = frames / 5;
+
+          printf("═══════════════════════════════════════\n");
+          printf("VSYNC: %lu | Frames: %lu | FPS: ~%lu\n",
+                 vsync_count, frames_processed, fps);
+          printf("═══════════════════════════════════════\n");
+
+          last_stats = HAL_GetTick();
+          last_frame_count = frames_processed;
     }
   }
   /* USER CODE END 3 */

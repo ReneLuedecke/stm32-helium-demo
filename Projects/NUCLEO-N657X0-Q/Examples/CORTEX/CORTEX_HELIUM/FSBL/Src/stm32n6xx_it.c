@@ -51,7 +51,12 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+extern TIM_HandleTypeDef htim2;
 
+// Variables for thermal pipeline
+extern volatile uint32_t vsync_count;
+extern volatile uint32_t frames_processed;
+extern volatile uint8_t frame_ready;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -214,5 +219,8 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /* USER CODE BEGIN 1 */
-
+void TIM2_IRQHandler(void)
+{
+  HAL_TIM_IRQHandler(&htim2);
+}
 /* USER CODE END 1 */
