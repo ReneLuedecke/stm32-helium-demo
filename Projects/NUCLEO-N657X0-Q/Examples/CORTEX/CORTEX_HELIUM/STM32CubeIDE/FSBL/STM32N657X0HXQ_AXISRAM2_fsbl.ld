@@ -47,6 +47,7 @@ MEMORY
   ROM      (xrw) : ORIGIN = 0x341d0400, LENGTH = 255K
   RAM      (xrw) : ORIGIN = 0x34000000, LENGTH = 2048K
   AXISRAM1 (xrw) : ORIGIN = 0x24060000, LENGTH = 1024K
+  DTCM     (xrw) : ORIGIN = 0x20000000, LENGTH = 128K    /* ← NEU! */
 }
 
 /* Sections */
@@ -149,16 +150,6 @@ SECTIONS
 
   } >RAM AT> ROM
 
-  .noncacheable :
-  {
-    . = ALIGN(8);
-    __snoncacheable = .;/* create symbol for start of section */
-    KEEP(*(.noncacheable))
-    . = ALIGN(8);
-    __enoncacheable = .;  /* create symbol for end of section */
-  } > RAM
-
-
   .gnu.sgstubs :
   {
     . = ALIGN(4);
@@ -180,6 +171,22 @@ SECTIONS
     _ebss = .;         /* define a global symbol at bss end */
     __bss_end__ = _ebss;
   } >RAM
+  /* Noncacheable section for DMA buffers */
+  .noncacheable (NOLOAD) :
+  {
+    . = ALIGN(8);
+    __snoncacheable = .;
+    *(.noncacheable)
+    . = ALIGN(8);
+    __enoncacheable = .;
+  } > RAM
+    /* DTCM Section - Fastest memory for LUTs */
+  .dtcm (NOLOAD) :
+  {
+    . = ALIGN(16);
+    *(.dtcm)
+    . = ALIGN(16);
+  } > DTCM
 /* Alle großen Arrays in AXISRAM1 - 1 MB ist mehr als genug! */
   .axisram1 (NOLOAD) :
   {

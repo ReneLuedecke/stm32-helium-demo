@@ -30,6 +30,8 @@
 #define HPIX 640
 #define VPIX 480
 #define N (HPIX * VPIX)
+#define SENSOR_WIDTH  HPIX
+#define SENSOR_HEIGHT VPIX
 
 #define LED1_SET()    (GPIOG->BSRR = LED1_Pin)
 #define LED1_RESET()  (GPIOG->BSRR = (LED1_Pin << 16))
@@ -67,26 +69,168 @@ UART_HandleTypeDef huart1;
 XSPI_HandleTypeDef hxspi2;
 
 /* USER CODE BEGIN PV */
-__attribute__((aligned(16), section(".axisram1"))) uint16_t src_u16[N];
-__attribute__((aligned(16), section(".axisram1"))) uint16_t planck_table[65536];
 
-__attribute__((aligned(16))) uint16_t gain_u16[N];
-__attribute__((aligned(16))) uint16_t dst_u16[N];
-__attribute__((aligned(16))) uint16_t off_u16[N];
-__attribute__((aligned(16))) uint16_t temp_u16[N];
+// ═══════════════════════════════════════════════════════
+// DTCM (128 KB) - Planck LUT
+// ═══════════════════════════════════════════════════════
+
+//__attribute__((section(".dtcm")))
+//uint16_t planck_table[65536];  // 128 KB
+__attribute__((aligned(16), section(".axisram1")))
+uint16_t planck_table[65536];  // ← Move to AXISRAM! (128 KB)
+// ═══════════════════════════════════════════════════════
+// AXISRAM1 (1 MB) - Line processing buffers
+// ═══════════════════════════════════════════════════════
+
+__attribute__((aligned(16), section(".axisram1")))
+uint16_t gain_line[HPIX];      // 1.3 KB
+
+__attribute__((aligned(16), section(".axisram1")))
+uint16_t dark_line[HPIX];      // 1.3 KB
+
+__attribute__((aligned(16), section(".axisram1")))
+uint16_t temp_line[HPIX];      // 1.3 KB
+
+__attribute__((aligned(16), section(".axisram1")))
+uint16_t line_output[HPIX];    // 1.3 KB
+
+// Total in AXISRAM1: ~5 KB ✓
+
+// ═══════════════════════════════════════════════════════
+// Main RAM (2 MB) - Frame buffers (dual purpose!)
+// ═══════════════════════════════════════════════════════
+
+// Frame buffers for DCMIPP (noncacheable for DMA)
+__attribute__((section(".noncacheable")))
+uint16_t frame_buffer_A[VPIX][HPIX];  // 614 KB
+
+__attribute__((section(".noncacheable")))
+uint16_t frame_buffer_B[VPIX][HPIX];  // 614 KB
+
+// Total: 1228 KB ✓ Fits perfectly!
+
+// ═══════════════════════════════════════════════════════
+// Aliases for Phase 1 Tests - Reuse frame buffers!
+// ═══════════════════════════════════════════════════════
+
+// Smart pointer aliasing - NO extra memory used!
+#define src_u16   ((uint16_t*)frame_buffer_A)    // 614 KB
+#define dst_u16   ((uint16_t*)frame_buffer_B)    // 614 KB
+#define temp_u16  ((uint16_t*)frame_buffer_A)    // Alias (can share with src)
+
+// Small gain array for full-frame benchmark (NOT frame-sized!)
+__attribute__((aligned(16)))
+uint16_t gain_u16[HPIX];  // Just 1.3 KB! (replicate for each line)
+
+// Small offset array
+__attribute__((aligned(16)))
+uint16_t off_u16[HPIX];   // Just 1.3 KB!
+
+// Legacy XSPI test buffers (small)
 uint8_t aTxBuffer[BUFFERSIZE];
-
-/* Buffer used for reception */
 __IO uint8_t aRxBuffer[BUFFERSIZE];
 
 uint32_t xspi_mmap_base = XSPI2_MMAP_BASE;
 
+
+
+#define TEST_LINES 10u
+#define LINE_BYTES (HPIX * sizeof(uint16_t))
+
+// A) Realistic-Test: getrennte Arrays in SRAM (AXISRAM1)
+__attribute__((aligned(32), section(".axisram1")))
+uint16_t sensor_data[TEST_LINES * HPIX];
+
+__attribute__((aligned(32), section(".axisram1")))
+uint16_t dark_frame[TEST_LINES * HPIX];
+
+__attribute__((aligned(32), section(".axisram1")))
+uint16_t gain_coeff[TEST_LINES * HPIX];
+
+__attribute__((aligned(32), section(".axisram1")))
+uint16_t offset_val[TEST_LINES * HPIX];
+
+// B) Thomas-Test: 4+4 interleaved in SRAM (dark+gain) und XSPI (offset+emi)
+__attribute__((aligned(32), section(".axisram1")))
+uint16_t dark_gain_4x4[TEST_LINES * HPIX * 2u];   // pro 8 Pixel 16 Halfwords -> *2
+
+// XSPI MMAP: als Pointer definieren, kein RAM nötig
+const uint16_t *offset_emi_4x4 = (const uint16_t*)XSPI2_MMAP_BASE;
+
+// C) LUTs: Planck und inverse Planck
+// planck_table existiert bei dir bereits in .axisram1 (128 KB)
+__attribute__((aligned(16), section(".axisram1")))
+uint16_t inv_planck_table[65536];  // zweite LUT (ebenfalls 128 KB)
+
+// ===== DWT-Zähler einmalig vorbereiten =====
+
+
+// ===== Testdaten-Init (Dummy-Inhalte) =====
+static void init_test_data(void)
+{
+    // simple Muster
+    for (uint32_t l = 0; l < TEST_LINES; ++l) {
+        uint16_t *s = &sensor_data[l*HPIX];
+        uint16_t *d = &dark_frame[l*HPIX];
+        uint16_t *g = &gain_coeff[l*HPIX];
+        uint16_t *o = &offset_val[l*HPIX];
+
+        for (uint32_t x = 0; x < HPIX; ++x) {
+            s[x] = (uint16_t)((x + l) & 0x0FFF);
+            d[x] = (uint16_t)((x & 0x00FF) >> 1);
+            g[x] = 0x6000;            // ≈0.75 in Q15
+            o[x] = 32;                // kleiner Offset
+        }
+    }
+
+    // inverse/Planck LUTs dummy (echte Werte später!)
+    for (uint32_t i = 0; i < 65536; ++i) {
+        inv_planck_table[i] = (uint16_t)i;
+        // planck_table[] hast du bereits definiert; zur Not:
+        // planck_table[i] = (uint16_t)i;
+    }
+
+    // Thomas‘ 4+4-Layout aus dark_frame/gain_coeff für die 10 Zeilen bauen:
+    // pro 8 Pixel: [D0..D3, G0..G3, D4..D7, G4..G7] => 16 Halfwords
+    for (uint32_t l = 0; l < TEST_LINES; ++l) {
+        const uint16_t *d = &dark_frame[l*HPIX];
+        const uint16_t *g = &gain_coeff[l*HPIX];
+        uint16_t *dg = &dark_gain_4x4[l*HPIX*2u];
+
+        for (uint32_t x = 0; x < HPIX; x += 8) {
+            // Block 0: D0..D3, G0..G3
+            dg[0] = d[x+0]; dg[1] = d[x+1]; dg[2] = d[x+2]; dg[3] = d[x+3];
+            dg[4] = g[x+0]; dg[5] = g[x+1]; dg[6] = g[x+2]; dg[7] = g[x+3];
+            // Block 1: D4..D7, G4..G7
+            dg[8]  = d[x+4]; dg[9]  = d[x+5]; dg[10] = d[x+6]; dg[11] = d[x+7];
+            dg[12] = g[x+4]; dg[13] = g[x+5]; dg[14] = g[x+6]; dg[15] = g[x+7];
+
+            dg += 16;
+        }
+    }
+}
+
+// Timer handle
 TIM_HandleTypeDef htim2;
 
 // Thermal pipeline variables
 volatile uint32_t vsync_count = 0;
 volatile uint32_t frames_processed = 0;
 volatile uint8_t frame_ready = 0;
+
+// XSPI Calibration Data Pointers
+#define XSPI_BASE          0x70000000
+#define XSPI_DARK_OFFSET   0x000000
+#define XSPI_GAIN_OFFSET   0x096000
+#define XSPI_OFFSET_OFFSET 0x12C000
+
+volatile uint16_t (*xspi_dark)[HPIX]   = (void*)(XSPI_BASE + XSPI_DARK_OFFSET);
+volatile uint16_t (*xspi_gain)[HPIX]   = (void*)(XSPI_BASE + XSPI_GAIN_OFFSET);
+volatile uint16_t (*xspi_offset)[HPIX] = (void*)(XSPI_BASE + XSPI_OFFSET_OFFSET);
+
+// DCMIPP variables
+volatile uint8_t dcmipp_active_buffer = 0;
+volatile uint8_t frame_ready_for_processing = 0;
 
 
 /* USER CODE END PV */
@@ -511,7 +655,93 @@ void process_mve(const uint16_t *src, const uint16_t *gain, uint16_t *dst, int n
         dst[i] = (uint16_t)result;
     }
 }
+static inline void process_thermal_line_ultra_optimized(
+    const uint16_t * __restrict__ sensor_data,
+    const uint16_t * __restrict__ dark,
+    const uint16_t * __restrict__ gain,
+    const uint16_t * __restrict__ offset,
+    const uint16_t * __restrict__ planck_lut,
+    uint16_t * __restrict__ output,
+    uint32_t width)
+{
+    const int32x4_t negShift15 = vdupq_n_s32(-15);
 
+    // Hint compiler about alignment
+    sensor_data = (const uint16_t*)__builtin_assume_aligned(sensor_data, 32);
+    dark = (const uint16_t*)__builtin_assume_aligned(dark, 32);
+    gain = (const uint16_t*)__builtin_assume_aligned(gain, 32);
+    offset = (const uint16_t*)__builtin_assume_aligned(offset, 32);
+    output = (uint16_t*)__builtin_assume_aligned(output, 32);
+
+    // Main loop - process 16 pixels per iteration
+    for (uint32_t x = 0; x < width; x += 16)
+    {
+        // ==================== FIRST 8 PIXELS ====================
+
+        // Load
+        uint16x8_t adc1 = vld1q_u16(&sensor_data[x]);
+        uint16x8_t dark1 = vld1q_u16(&dark[x]);
+        uint16x8_t gain1 = vld1q_u16(&gain[x]);
+        uint16x8_t offset1 = vld1q_u16(&offset[x]);
+
+        // Dark subtract
+        uint16x8_t corrected1 = vqsubq_u16(adc1, dark1);
+
+        // Gain (Q15)
+        uint32x4_t lo1 = vmullbq_int_u16(corrected1, gain1);
+        uint32x4_t hi1 = vmulltq_int_u16(corrected1, gain1);
+        lo1 = vqrshlq_u32(lo1, negShift15);
+        hi1 = vqrshlq_u32(hi1, negShift15);
+
+        // ==================== SECOND 8 PIXELS (PARALLEL) ====================
+
+        // Load (while waiting for first batch)
+        uint16x8_t adc2 = vld1q_u16(&sensor_data[x + 8]);
+        uint16x8_t dark2 = vld1q_u16(&dark[x + 8]);
+        uint16x8_t gain2 = vld1q_u16(&gain[x + 8]);
+        uint16x8_t offset2 = vld1q_u16(&offset[x + 8]);
+
+        // Dark subtract
+        uint16x8_t corrected2 = vqsubq_u16(adc2, dark2);
+
+        // Gain (Q15)
+        uint32x4_t lo2 = vmullbq_int_u16(corrected2, gain2);
+        uint32x4_t hi2 = vmulltq_int_u16(corrected2, gain2);
+        lo2 = vqrshlq_u32(lo2, negShift15);
+        hi2 = vqrshlq_u32(hi2, negShift15);
+
+        // ==================== FINISH FIRST 8 ====================
+
+        // Narrow to 16-bit
+        uint16x8_t result1 = vdupq_n_u16(0);
+        result1 = vqmovnbq_u32(result1, lo1);
+        result1 = vqmovntq_u32(result1, hi1);
+
+        // Add offset
+        result1 = vqaddq_u16(result1, offset1);
+
+        // Planck LUT
+        result1 = vldrhq_gather_shifted_offset_u16(planck_lut, result1);
+
+        // ==================== FINISH SECOND 8 ====================
+
+        // Narrow to 16-bit
+        uint16x8_t result2 = vdupq_n_u16(0);
+        result2 = vqmovnbq_u32(result2, lo2);
+        result2 = vqmovntq_u32(result2, hi2);
+
+        // Add offset
+        result2 = vqaddq_u16(result2, offset2);
+
+        // Planck LUT
+        result2 = vldrhq_gather_shifted_offset_u16(planck_lut, result2);
+
+        // ==================== STORE BOTH ====================
+
+        vst1q_u16(&output[x], result1);
+        vst1q_u16(&output[x + 8], result2);
+    }
+}
 void planck_lut_mve(const uint16_t *src, uint16_t *dst, int n)
 {
     int i = 0;
@@ -525,6 +755,20 @@ void planck_lut_mve(const uint16_t *src, uint16_t *dst, int n)
 }
 
 /* USER CODE BEGIN 4 */
+static inline void DWT_CycleCounter_Init(void)
+{
+    // Trace/DWT einschalten
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+
+    // Manche MCUs haben ein verriegeltes DWT -> via LAR unlocken
+    #if defined(DWT_LAR)
+    DWT->LAR = 0xC5ACCE55;   // <-- richtiges Register (nicht LSR)
+    #endif
+
+    DWT->CYCCNT = 0;
+    DWT->CTRL  |= DWT_CTRL_CYCCNTENA_Msk;
+}
+
 
 void xspi_memory_mapped_speed_test(void) {
     printf("\n");
@@ -769,6 +1013,379 @@ void xspi_memory_mapped_speed_test(void) {
     printf("║ Memory-Mapped Speed Test Complete!            ║\n");
     printf("╚════════════════════════════════════════════════╝\n");
 }
+
+static inline void process_thermal_line_realistic(
+    const uint16_t *sensor_data,      // Raw sensor ADC values
+    const uint16_t *dark,             // Dark frame
+    const uint16_t *gain,             // Gain coefficients (Q15)
+    const uint16_t *offset,           // Offset values (u16)
+    const uint16_t *planck_lut,       // Planck LUT (u16)
+    uint16_t *output,                 // Output buffer
+    uint32_t width)                   // 640, vielfaches von 8
+{
+    const int32x4_t negShift15 = vdupq_n_s32(-15);
+
+    for (uint32_t x = 0; x < width; x += 8)
+    {
+        // 1) ADC & Dark laden
+        uint16x8_t adc      = vld1q_u16(&sensor_data[x]);
+        uint16x8_t dark_val = vld1q_u16(&dark[x]);
+
+        // 2) Dark abziehen (saturierend, um Underflow zu vermeiden)
+        uint16x8_t corrected = vqsubq_u16(adc, dark_val);
+
+        // 3) Gain laden
+        uint16x8_t gain_val = vld1q_u16(&gain[x]);
+
+        // 4) 16x16 -> 32 (low/high), runden & >>15 in einem Schritt
+        uint32x4_t lo32 = vmullbq_int_u16(corrected, gain_val);
+        uint32x4_t hi32 = vmulltq_int_u16(corrected, gain_val);
+        lo32 = vqrshlq_u32(lo32, negShift15);   // rundend >>15
+        hi32 = vqrshlq_u32(hi32, negShift15);
+
+        // 5) Offset laden und auf 32 Bit erweitern
+        uint16x8_t offset_val = vld1q_u16(&offset[x]);
+        uint32x4_t lo_off = vmovlbq_u16(offset_val); // widen low 4x u16 -> u32
+        uint32x4_t hi_off = vmovltq_u16(offset_val); // widen high 4x u16 -> u32
+
+        // 6) Offset addieren
+        lo32 = vaddq_u32(lo32, lo_off);
+        hi32 = vaddq_u32(hi32, hi_off);
+
+        // 7) Packen 32->16 (MVE-Variante, nicht NEONs vqmovn_u32!)
+        uint16x8_t result16 = vdupq_n_u16(0);
+        result16 = vqmovnbq_u32(result16, lo32);  // lower half
+        result16 = vqmovntq_u32(result16, hi32);  // upper half
+
+        // 8) Planck-LUT (gather, 16-bit Indizes)
+        result16 = vldrhq_gather_shifted_offset_u16(planck_lut, result16);
+
+        // 9) Store
+        vst1q_u16(&output[x], result16);
+    }
+}
+static inline void process_thermal_line_optimized(
+    const uint16_t *sensor_data,
+    const uint16_t *dark,
+    const uint16_t *gain,
+    const uint16_t *offset,
+    const uint16_t *planck_lut,
+    uint16_t *output,
+    uint32_t width)
+{
+    const int32x4_t negShift15 = vdupq_n_s32(-15);
+
+    for (uint32_t x = 0; x < width; x += 8)
+    {
+        // Load
+        uint16x8_t adc = vld1q_u16(&sensor_data[x]);
+        uint16x8_t dark_val = vld1q_u16(&dark[x]);
+        uint16x8_t gain_val = vld1q_u16(&gain[x]);
+        uint16x8_t offset_val = vld1q_u16(&offset[x]);
+
+        // Dark subtract
+        uint16x8_t corrected = vqsubq_u16(adc, dark_val);
+
+        // Gain (Q15)
+        uint32x4_t lo32 = vmullbq_int_u16(corrected, gain_val);
+        uint32x4_t hi32 = vmulltq_int_u16(corrected, gain_val);
+        lo32 = vqrshlq_u32(lo32, negShift15);  // Round & shift
+        hi32 = vqrshlq_u32(hi32, negShift15);
+
+        // Narrow to 16-bit
+        uint16x8_t result16 = vdupq_n_u16(0);
+        result16 = vqmovnbq_u32(result16, lo32);
+        result16 = vqmovntq_u32(result16, hi32);
+
+        // Add offset (16-bit, much faster!)
+        result16 = vqaddq_u16(result16, offset_val);
+
+        // Planck LUT
+        result16 = vldrhq_gather_shifted_offset_u16(planck_lut, result16);
+
+        // Store
+        vst1q_u16(&output[x], result16);
+    }
+}
+// dark_gain_4x4: [D0..D3, G0..G3, D4..D7, G4..G7, ...]  (u16, SRAM)
+// offset_emi_4x4: [Off0..Off3, Emi0..Emi3, Off4..Off7, Emi4..Emi7, ...] (u16, XSPI-MMAP)
+// planck_inv/planck: u16 LUTs (ideal in DTCM), output: u16
+static inline void process_thermal_line_thomas(
+    const uint16_t *adc_sram,          // 640 u16 in SRAM
+    const uint16_t *dark_gain_4x4,     // 4+4 interleaved in SRAM
+    const uint16_t *offset_emi_4x4,    // 4+4 interleaved in XSPI (MMAP)
+    const uint16_t *planck_inv_lut,    // inverse Planck (u16)
+    const uint16_t *planck_lut,        // Planck (u16)
+    uint16_t *out,                     // u16
+    uint32_t width)                    // 640 (Vielfaches von 8)
+{
+    const int32x4_t negShift15 = vdupq_n_s32(-15);
+    const uint32x4_t mask16    = vdupq_n_u32(0xFFFFu);
+    uint16_t last_valid = 0;
+
+    for (uint32_t x = 0; x < width; x += 8)
+    {
+        // --- ADC laden (8) ---
+        uint16x8_t adc8 = vld1q_u16(&adc_sram[x]);
+        uint32x4_t adc_lo = vmovlbq_u16(adc8);
+        uint32x4_t adc_hi = vmovltq_u16(adc8);
+
+        // --- DARK/GAIN (4+4) aus SRAM ---
+        // index = 2*x  (pro 8 Pixel sind es 16 Halfwords: 8 für [D0..D3,G0..G3], 8 für [D4..D7,G4..G7])
+        const uint16_t *dg_ptr = &dark_gain_4x4[2u * x];
+        uint16x8_t dg0 = vld1q_u16(&dg_ptr[0]);  // D0..D3, G0..G3
+        uint16x8_t dg1 = vld1q_u16(&dg_ptr[8]);  // D4..D7, G4..G7
+        uint32x4_t dark_lo = vmovlbq_u16(dg0);
+        uint32x4_t gain_lo = vmovltq_u16(dg0);
+        uint32x4_t dark_hi = vmovlbq_u16(dg1);
+        uint32x4_t gain_hi = vmovltq_u16(dg1);
+
+        // corrected = max(adc - dark, 0)  (saturierend)
+        uint32x4_t corr_lo = vqsubq_u32(adc_lo, dark_lo);
+        uint32x4_t corr_hi = vqsubq_u32(adc_hi, dark_hi);
+
+        // Gain (Q15) anwenden: (corr*gain + 0.5)>>15  (u32* u32, gain <= 65535)
+        uint32x4_t prod_lo = vmulq_u32(corr_lo, gain_lo);
+        uint32x4_t prod_hi = vmulq_u32(corr_hi, gain_hi);
+        prod_lo = vqrshlq_u32(prod_lo, negShift15);
+        prod_hi = vqrshlq_u32(prod_hi, negShift15);
+
+        // --- OFFSET/EMI (4+4) aus XSPI per 32-bit laden ---
+        const uint16_t *oe16 = &offset_emi_4x4[2u * x];   // x in 8er-Schritten → 32B aligned
+
+        // Block0: Off0..Off3, Emi0..Emi3   (8 Halfwords)
+        uint16x8_t oe0_16 = vld1q_u16(&oe16[0]);
+        // Block1: Off4..Off7, Emi4..Emi7   (8 Halfwords)
+        uint16x8_t oe1_16 = vld1q_u16(&oe16[8]);
+
+        // u16 → u32 aufspalten
+        uint32x4_t off_lo = vmovlbq_u16(oe0_16);          // Off0..Off3
+        uint32x4_t emi_lo = vmovltq_u16(oe0_16);          // Emi0..Emi3
+        uint32x4_t off_hi = vmovlbq_u16(oe1_16);          // Off4..Off7
+        uint32x4_t emi_hi = vmovltq_u16(oe1_16);          // Emi4..Emi7
+
+        // Offset addieren
+        prod_lo = vaddq_u32(prod_lo, off_lo);
+        prod_hi = vaddq_u32(prod_hi, off_hi);
+
+//        // --- primitive BPC (scalar, robust & selten) ---
+//        // Gewinne als u16 holen (nur für die Maske)
+//        uint16x8_t gain16 = vdupq_n_u16(0);
+//        gain16 = vqmovnbq_u32(gain16, gain_lo);
+//        gain16 = vqmovntq_u32(gain16, gain_hi);
+//
+//        // Zwischenresultat u16 (vor LUT), für BPC/prev
+//        uint16x8_t pix16 = vdupq_n_u16(0);
+//        pix16 = vqmovnbq_u32(pix16, prod_lo);
+//        pix16 = vqmovntq_u32(pix16, prod_hi);
+//
+//        // scalar BPC: wenn gain==0 → ersetze mit last_valid (vorheriges Pixel)
+//        uint16_t tmp[8];
+//        vst1q_u16(tmp, pix16);
+//        uint16_t gtmp[8];
+//        vst1q_u16(gtmp, gain16);
+//        for (int i = 0; i < 8; ++i) {
+//            if (gtmp[i] == 0) tmp[i] = last_valid;
+//            else              last_valid = tmp[i];
+//        }
+//        pix16 = vld1q_u16(tmp);
+
+
+        uint16x8_t pix16 = vdupq_n_u16(0);
+        pix16 = vqmovnbq_u32(pix16, prod_lo);
+        pix16 = vqmovntq_u32(pix16, prod_hi);
+
+
+        // --- inverse Planck ---
+        pix16 = vldrhq_gather_shifted_offset_u16(planck_inv_lut, pix16);
+
+        // --- Emissivität anwenden: (pix * emi + 0.5)>>15 ---
+        uint32x4_t p_lo = vmovlbq_u16(pix16);
+        uint32x4_t p_hi = vmovltq_u16(pix16);
+        p_lo = vmulq_u32(p_lo, emi_lo);
+        p_hi = vmulq_u32(p_hi, emi_hi);
+        p_lo = vqrshlq_u32(p_lo, negShift15);
+        p_hi = vqrshlq_u32(p_hi, negShift15);
+
+        uint16x8_t after_emi = vdupq_n_u16(0);
+        after_emi = vqmovnbq_u32(after_emi, p_lo);
+        after_emi = vqmovntq_u32(after_emi, p_hi);
+
+        // --- Planck ---
+        after_emi = vldrhq_gather_shifted_offset_u16(planck_lut, after_emi);
+
+        // Store
+        vst1q_u16(&out[x], after_emi);
+    }
+}
+// Hilfsfunktion für saubere Zeit-Ausgabe
+static void print_line_stats(const char* name, uint32_t total_cycles, uint32_t lines)
+{
+    const uint32_t cpu_hz = SystemCoreClock;             // z.B. 600000000
+    uint32_t per_line     = total_cycles / lines;
+    uint32_t full_frame   = per_line * 480u;
+
+    uint32_t total_us     = (uint32_t)((uint64_t)total_cycles * 1000000ull / cpu_hz);
+    uint32_t per_line_us  = (uint32_t)((uint64_t)per_line     * 1000000ull / cpu_hz);
+    uint32_t frame_ms     = (uint32_t)((uint64_t)full_frame   * 1000ull    / cpu_hz);
+    uint32_t fps          = (cpu_hz / (full_frame ? full_frame : 1u));
+
+    printf("\n[%s] Lines: %lu\n", name, (unsigned long)lines);
+    printf("  Total:    %lu cycles  (%lu us)\n", (unsigned long)total_cycles, (unsigned long)total_us);
+    printf("  Per line: %lu cycles  (%lu us)\n", (unsigned long)per_line,     (unsigned long)per_line_us);
+
+    printf("\n[Extrapolation to 480 lines]\n");
+    printf("  Full frame: %lu cycles  (%lu ms)\n", (unsigned long)full_frame, (unsigned long)frame_ms);
+    printf("  FPS: %lu\n", (unsigned long)fps);
+
+    if (per_line_us <= 41u) {
+        printf("  ✓ Can sustain 50 FPS! Margin: %lu us\n", (unsigned long)(41u - per_line_us));
+    } else {
+        printf("  ⚠ Need %lu us faster for 50 FPS\n", (unsigned long)(per_line_us - 41u));
+    }
+    printf("──────────────────────────────────────────────\n");
+}
+
+// Prototypen deiner Kernels
+void process_thermal_line_realistic(
+    const uint16_t *sensor_data,
+    const uint16_t *dark,
+    const uint16_t *gain,
+    const uint16_t *offset,
+    const uint16_t *planck_lut,
+    uint16_t *output,
+    uint32_t width);
+
+void process_thermal_line_thomas(
+    const uint16_t *adc_sram,          // 640 u16 in SRAM
+    const uint16_t *dark_gain_4x4,     // [D0..D3,G0..G3,D4..D7,G4..G7,...] in SRAM
+    const uint16_t *offset_emi_4x4,    // [Off0..Off3,Emi0..Emi3,...] in XSPI (MMAP)
+    const uint16_t *planck_inv_lut,    // u16 (ideal DTCM)
+    const uint16_t *planck_lut,        // u16 (ideal DTCM)
+    uint16_t *out,
+    uint32_t width);
+
+// === Beispiel-Test ===
+// Hinweis: Achte auf Ausrichtung! Für beste Performance:
+//   - sensor_data / dark_gain_4x4 in SRAM, 32-Byte aligned
+//   - offset_emi_4x4 in XSPI-MMAP (0x7000_0000...), 32-Byte aligned
+//   - LUTs in DTCM (CPU-only)
+void run_test_thermal_pipelines(void)
+{
+    const uint32_t test_lines = 10;
+
+    // ---- Eingabepuffer (hier nur als Platzhalter/Beispiel) ----
+    extern uint16_t sensor_data[];       // [HPIX*test_lines] SRAM
+    extern uint16_t dark_frame[];        // [HPIX*test_lines] SRAM
+    extern uint16_t gain_coeff[];        // [HPIX*test_lines] SRAM
+    extern uint16_t offset_val[];        // [HPIX*test_lines] SRAM (nur für "realistic")
+
+    extern uint16_t dark_gain_4x4[];     // [HPIX*test_lines] * 1 (weil 4+4 in 8 halfwords) SRAM
+    //extern uint16_t offset_emi_4x4[];    // [HPIX*test_lines] * 1 (4+4) XSPI-MMAP
+
+    extern uint16_t planck_table[];      // u16 LUT (DTCM empfohlen)
+    extern uint16_t inv_planck_table[];  // u16 LUT (DTCM empfohlen)
+
+    static uint16_t line_output[HPIX] __attribute__((aligned(32)));
+
+    // DWT-Zähler an
+    DWT_CycleCounter_Init();
+
+    // -------- Test A: Realistic (getrennte Arrays) --------
+    {
+        printf("\n[Test A] Realistic Thermal Pipeline...\n");
+        volatile uint32_t t0, t1;
+        DWT->CYCCNT = 0;
+        t0 = DWT->CYCCNT;
+
+        for (uint32_t line = 0; line < test_lines; ++line) {
+            const uint16_t *adc    = &sensor_data[line * HPIX];
+            const uint16_t *dark   = &dark_frame[line * HPIX];
+            const uint16_t *gain   = &gain_coeff[line * HPIX];
+            const uint16_t *offset = &offset_val[line * HPIX];
+
+            process_thermal_line_realistic(
+                adc, dark, gain, offset,
+                planck_table,
+                line_output,
+                HPIX
+            );
+        }
+        t1 = DWT->CYCCNT;
+        print_line_stats("Test A (realistic)", t1 - t0, test_lines);
+    }
+
+    // -------- Test B: Thomas (4+4 interleaved, Offset/Emi in XSPI) --------
+    {
+        printf("\n[Test B] Thomas 4+4 Interleaved (XSPI offset/emissivity)...\n");
+        volatile uint32_t t0, t1;
+        DWT->CYCCNT = 0;
+        t0 = DWT->CYCCNT;
+        assert((((uintptr_t)dark_gain_4x4)   & 0x1F) == 0);
+        assert((((uintptr_t)offset_emi_4x4)  & 0x1F) == 0);
+
+        // Stride-Konsistenz
+        static_assert((HPIX % 8) == 0, "HPIX must be multiple of 8");
+        for (uint32_t line = 0; line < test_lines; ++line) {
+            const uint16_t *adc    = &sensor_data[line * HPIX];          // SRAM
+            //const uint16_t *dg44   = &dark_gain_4x4[line * HPIX];        // SRAM (D0..D3,G0..G3, ...)
+            const uint16_t *dg44 = &dark_gain_4x4[line * (HPIX * 2u)];
+                 // XSPI (MMAP, 4+4)
+            const uint16_t *oe44 = &offset_emi_4x4[line * (HPIX * 2u)];
+            process_thermal_line_thomas(
+                adc,
+                dg44,
+                oe44,
+                inv_planck_table,
+                planck_table,
+                line_output,
+                HPIX
+            );
+        }
+        t1 = DWT->CYCCNT;
+        print_line_stats("Test B (thomas 4+4)", t1 - t0, test_lines);
+    }
+
+    printf("\n═══════════════════════════════════\n");
+}
+
+static inline void process_thermal_line_fastest(
+    const uint16_t * __restrict__ sensor_data,
+    const uint16_t * __restrict__ dark,
+    const uint16_t * __restrict__ gain,
+    const uint16_t * __restrict__ offset,
+    const uint16_t * __restrict__ planck_lut,
+    uint16_t * __restrict__ output,
+    uint32_t width)
+{
+    for (uint32_t x = 0; x < width; x += 8)
+    {
+        // Load
+        uint16x8_t adc = vld1q_u16(&sensor_data[x]);
+        uint16x8_t dark_val = vld1q_u16(&dark[x]);
+        uint16x8_t gain_val = vld1q_u16(&gain[x]);
+        uint16x8_t offset_val = vld1q_u16(&offset[x]);
+
+        // Dark subtract
+        uint16x8_t corrected = vqsubq_u16(adc, dark_val);
+
+        // ⭐ Gain (Q15) - Reinterpret as signed, multiply, reinterpret back
+        int16x8_t corrected_s = vreinterpretq_s16_u16(corrected);
+        int16x8_t gain_s = vreinterpretq_s16_u16(gain_val);
+        int16x8_t result_s = vqrdmulhq_s16(corrected_s, gain_s);
+        uint16x8_t result = vreinterpretq_u16_s16(result_s);
+
+        // Add offset
+        result = vqaddq_u16(result, offset_val);
+
+        // Planck LUT
+        result = vldrhq_gather_shifted_offset_u16(planck_lut, result);
+
+        // Store
+        vst1q_u16(&output[x], result);
+    }
+}
+
 /* USER CODE END 4 */
 /* USER CODE END 0 */
 
@@ -939,52 +1556,356 @@ int main(void)
       planck_table[i] = (uint16_t)i;
   }
 
-  // Initialize test pattern
-  printf("Generating test pattern...\n");
+  // Initialize test pattern using frame_buffer_A (via src_u16 alias)
+  printf("Generating test pattern in frame buffer...\n");
   for (uint32_t i = 0; i < N; i++) {
       uint32_t x = i % HPIX;
       src_u16[i] = (uint16_t)((x * 16383) / HPIX);
+  }
+
+  // Initialize small gain array (will be replicated per line)
+  printf("Initializing gain table...\n");
+  for (uint32_t i = 0; i < HPIX; i++) {
       gain_u16[i] = gain_to_q15(1.0f);
   }
+
+  // XSPI speed test
   xspi_memory_mapped_speed_test();
 
   printf("\n╔════════════════════════════════════════════════╗\n");
   printf("║ Memory-Mapped Mode Ready!                     ║\n");
   printf("╚════════════════════════════════════════════════╝\n");
-  // Benchmark
-  printf("\n=== Performance Benchmark ===\n");
-  __DSB();
-  __ISB();
-  DWT->CTRL |= 1;
+
+  printf("\n=== Performance Benchmark (Optimized) ===\n");
+  printf("Testing with memcpy optimization...\n");
+
+  // ════════════════════════════════════════════════
+  // Test 1: memcpy test
+  // ════════════════════════════════════════════════
+  printf("\n[Test 1] memcpy test...\n");
+  memcpy(temp_line, gain_u16, HPIX * sizeof(uint16_t));
+  printf("  ✓ memcpy OK\n");
+
+  // ════════════════════════════════════════════════
+  // Test 2: MVE Gain
+  // ════════════════════════════════════════════════
+  printf("[Test 2] MVE Gain test...\n");
+  process_mve(temp_line, gain_u16, temp_line, HPIX, 0);
+  printf("  ✓ MVE Gain OK\n");
+
+  // ════════════════════════════════════════════════
+  // Test 3: Planck LUT (now in AXISRAM)
+  // ════════════════════════════════════════════════
+  printf("[Test 3] Planck LUT test...\n");
+  planck_lut_mve(temp_line, line_output, HPIX);
+  printf("  ✓ Planck LUT OK\n");
+
+  // ════════════════════════════════════════════════
+  // Test 4: Full pipeline with memcpy
+  // ════════════════════════════════════════════════
+  printf("\n[Test 4] Full pipeline (1 line)...\n");
+
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
+  uint32_t t_start = DWT->CYCCNT;
+
+  // Fast memcpy
+  memcpy(temp_line, gain_u16, HPIX * sizeof(uint16_t));
+
+  // Gain
+  process_mve(temp_line, gain_u16, temp_line, HPIX, 0);
+
+  // Planck
+  planck_lut_mve(temp_line, line_output, HPIX);
+
+  uint32_t t_end = DWT->CYCCNT;
+  uint32_t cycles = t_end - t_start;
+
+  printf("  ✓ Pipeline OK\n");
+  printf("  Time: %lu cycles (%lu us)\n", cycles, cycles / 600);
+
+  // ════════════════════════════════════════════════
+  // Test 5: Loop 10 lines (optimized)
+  // ════════════════════════════════════════════════
+  printf("\n[Test 5] Processing 10 lines (optimized)...\n");
+
+  DWT->CYCCNT = 0;
   uint32_t t0 = DWT->CYCCNT;
 
-  process_mve(src_u16, gain_u16, temp_u16, N, 0);
-  uint32_t t1 = DWT->CYCCNT;
+  for (int line = 0; line < 10; line++) {
+      // Fast memcpy
+      memcpy(temp_line, gain_u16, HPIX * sizeof(uint16_t));
 
-  planck_lut_mve(temp_u16, dst_u16, N);
-  uint32_t t2 = DWT->CYCCNT;
+      // Gain
+      process_mve(temp_line, gain_u16, temp_line, HPIX, 0);
 
-  uint32_t cyc_gain = (t1 - t0);
-  uint32_t cyc_planck = (t2 - t1);
-  uint32_t cyc_total = (t2 - t0);
+      // Planck
+      planck_lut_mve(temp_line, line_output, HPIX);
+  }
 
-  printf("Gain/Offset: %u cycles (%u ms)\n", cyc_gain, CYCLES_TO_MS(cyc_gain));
-  printf("Planck LUT:  %u cycles (%u ms)\n", cyc_planck, CYCLES_TO_MS(cyc_planck));
-  printf("Total:       %u cycles (%u ms)\n", cyc_total, CYCLES_TO_MS(cyc_total));
-  printf("FPS:         %u\n\n", 600000000 / cyc_total);
+  uint32_t t_total = DWT->CYCCNT - t0;
+
+  printf("  ✓ 10 lines OK\n");
+  printf("  Total: %lu cycles (%lu ms)\n", t_total, t_total / 600000);
+  printf("  Per line: %lu cycles (%lu us)\n", t_total / 10, (t_total / 10) / 600);
+
+  // Extrapolate
+  uint32_t full_frame = (t_total / 10) * 480;
+  printf("\n[Extrapolation to 480 lines]\n");
+  printf("  Full frame: %lu cycles (%lu ms)\n", full_frame, full_frame / 600000);
+  printf("  FPS: %lu\n", 600000000 / full_frame);
+
+  uint32_t line_us = (t_total / 10) / 600;
+  printf("\nPerformance vs Target:\n");
+  printf("  Current: %lu us per line\n", line_us);
+  printf("  Budget @ 50 FPS: 41 us per line\n");
+
+  if (line_us < 41) {
+      printf("  ✓ Can sustain 50 FPS! Margin: %lu us\n", 41 - line_us);
+  } else {
+      printf("  ⚠ Too slow for 50 FPS! Need %lu us faster\n", line_us - 41);
+  }
+  printf("\n[Test 6] Detailed Timing Breakdown...\n");
+
+  // Test memcpy alone
+  DWT->CYCCNT = 0;
+  uint32_t t_memcpy_start = DWT->CYCCNT;
+  for (int i = 0; i < 100; i++) {
+      memcpy(temp_line, gain_u16, HPIX * sizeof(uint16_t));
+  }
+  uint32_t t_memcpy = (DWT->CYCCNT - t_memcpy_start) / 100;
+
+  // Test MVE Gain alone
+  DWT->CYCCNT = 0;
+  uint32_t t_gain_start = DWT->CYCCNT;
+  for (int i = 0; i < 100; i++) {
+      process_mve(temp_line, gain_u16, temp_line, HPIX, 0);
+  }
+  uint32_t t_gain = (DWT->CYCCNT - t_gain_start) / 100;
+
+  // Test Planck alone
+  DWT->CYCCNT = 0;
+  uint32_t t_planck_start = DWT->CYCCNT;
+  for (int i = 0; i < 100; i++) {
+      planck_lut_mve(temp_line, line_output, HPIX);
+  }
+  uint32_t t_planck = (DWT->CYCCNT - t_planck_start) / 100;
+
+  printf("  memcpy:  %lu cycles (%lu us)\n", t_memcpy, t_memcpy / 600);
+  printf("  MVE Gain: %lu cycles (%lu us)\n", t_gain, t_gain / 600);
+  printf("  Planck:   %lu cycles (%lu us)\n", t_planck, t_planck / 600);
+  printf("  TOTAL:    %lu cycles (%lu us)\n",
+         t_memcpy + t_gain + t_planck,
+         (t_memcpy + t_gain + t_planck) / 600);
+
+  printf("\n[Test 8] NO COPY - Direct processing...\n");
+
+  DWT->CYCCNT = 0;
+  t0 = DWT->CYCCNT;
+
+  for (int line = 0; line < 10; line++) {
+      // NO memcpy! Process directly
+	  process_mve(temp_line, gain_u16, temp_line, HPIX, 0);
+      planck_lut_mve(temp_line, line_output, HPIX);
+  }
+
+  uint32_t total = DWT->CYCCNT - t0;
+
+  printf("  Total: %lu cycles (%lu ms)\n", t_total, t_total / 600000);
+  printf("  Per line: %lu cycles (%lu us)\n", t_total / 10, (t_total / 10) / 600);
+
+  full_frame = (t_total / 10) * 480;
+  printf("  Full frame: %lu cycles (%lu ms)\n", full_frame, full_frame / 600000);
+  printf("  FPS: %lu\n", 600000000 / full_frame);
+
+  line_us = (t_total / 10) / 600;
+  if (line_us < 41) {
+      printf("  ✓ Can sustain 50 FPS! Margin: %lu us\n", 41 - line_us);
+  } else {
+      printf("  ⚠ Still need %lu us faster\n", line_us - 41);
+  }
 
 
-  	printf("\n");
-	printf("╔════════════════════════════════════════════════╗\n");
-	printf("║ Initializing 50 Hz Thermal Pipeline           ║\n");
-	printf("╚════════════════════════════════════════════════╝\n");
+  printf("\n=== REALISTIC THERMAL PIPELINE TEST ===\n");
 
-	thermal_check_timer_clock();
-	thermal_vsync_init();
-	thermal_vsync_start();
+  // Create realistic test data
+  static uint16_t sensor_data[HPIX];
+  static uint16_t dark_frame[HPIX];
+  static uint16_t gain_coeff[HPIX];
+  static uint16_t offset_val[HPIX];
 
-	printf("Pipeline ready! LED should blink at 50 Hz\n");
-	printf("\n");
+  // Fill with realistic values
+  printf("Generating realistic test data...\n");
+  for (int i = 0; i < HPIX; i++) {
+      sensor_data[i] = 8000 + (i % 100);  // Simulated ADC values
+      dark_frame[i] = 100 + (i % 10);     // Dark current
+      gain_coeff[i] = gain_to_q15(1.0f);  // Gain = 1.0
+      offset_val[i] = 500;                // Offset
+  }
+
+  printf("\n[Test 10] Realistic Thermal Pipeline...\n");
+
+  DWT->CYCCNT = 0;
+   t0 = DWT->CYCCNT;
+
+  for (int line = 0; line < 10; line++) {
+      process_thermal_line_realistic(
+          sensor_data,
+          dark_frame,
+          gain_coeff,
+          offset_val,
+          planck_table,
+          line_output,
+          HPIX
+      );
+  }
+
+  t_total = DWT->CYCCNT - t0;
+
+  printf("  Total: %lu cycles (%lu ms)\n", t_total, t_total / 600000);
+  printf("  Per line: %lu cycles (%lu us)\n", t_total / 10, (t_total / 10) / 600);
+
+   full_frame = (t_total / 10) * 480;
+  printf("\n[Extrapolation]\n");
+  printf("  Full frame: %lu cycles (%lu ms)\n", full_frame, full_frame / 600000);
+  printf("  FPS: %lu\n", 600000000 / full_frame);
+
+   line_us = (t_total / 10) / 600;
+  if (line_us < 41) {
+      printf("  ✓ Can sustain 50 FPS! Margin: %lu us\n", 41 - line_us);
+  } else {
+      printf("  ⚠ Need %lu us faster for 50 FPS\n", line_us - 41);
+  }
+
+  printf("\n═══════════════════════════════════\n");
+
+  printf("\n[Test 14] Realistic Thermal Pipeline...\n");
+
+    DWT->CYCCNT = 0;
+     t0 = DWT->CYCCNT;
+
+    for (int line = 0; line < 10; line++) {
+        process_thermal_line_optimized(
+            sensor_data,
+            dark_frame,
+            gain_coeff,
+            offset_val,
+            planck_table,
+            line_output,
+            HPIX
+        );
+    }
+
+    t_total = DWT->CYCCNT - t0;
+
+    printf("  Total: %lu cycles (%lu ms)\n", t_total, t_total / 600000);
+    printf("  Per line: %lu cycles (%lu us)\n", t_total / 10, (t_total / 10) / 600);
+
+     full_frame = (t_total / 10) * 480;
+    printf("\n[Extrapolation]\n");
+    printf("  Full frame: %lu cycles (%lu ms)\n", full_frame, full_frame / 600000);
+    printf("  FPS: %lu\n", 600000000 / full_frame);
+
+     line_us = (t_total / 10) / 600;
+    if (line_us < 41) {
+        printf("  ✓ Can sustain 50 FPS! Margin: %lu us\n", 41 - line_us);
+    } else {
+        printf("  ⚠ Need %lu us faster for 50 FPS\n", line_us - 41);
+    }
+
+    printf("\n═══════════════════════════════════\n");
+    printf("\n[Test 15] ULTRA OPTIMIZED (2x unroll)...\n");
+
+    DWT->CYCCNT = 0;
+    t0 = DWT->CYCCNT;
+
+    for (int line = 0; line < 10; line++) {
+        process_thermal_line_ultra_optimized(
+            sensor_data,
+            dark_frame,
+            gain_coeff,
+            offset_val,
+            planck_table,
+            line_output,
+            HPIX
+        );
+    }
+
+    t_total = DWT->CYCCNT - t0;
+
+    printf("  Total: %lu cycles (%lu ms)\n", t_total, t_total / 600000);
+    printf("  Per line: %lu cycles (%lu us)\n", t_total / 10, (t_total / 10) / 600);
+
+    full_frame = (t_total / 10) * 480;
+    printf("\n[Extrapolation]\n");
+    printf("  Full frame: %lu cycles (%lu ms)\n", full_frame, full_frame / 600000);
+    printf("  FPS: %lu\n", 600000000 / full_frame);
+
+    line_us = (t_total / 10) / 600;
+    if (line_us <= 41) {
+        printf("  ✓✓✓ CAN SUSTAIN 50 FPS! Margin: %lu us\n", 41 - line_us);
+    } else {
+        printf("  ⚠ Need %lu us faster for 50 FPS\n", line_us - 41);
+    }
+
+    printf("═══════════════════════════════════════\n");
+
+    printf("\n[Test 16] FASTEST (vqrdmulhq)...\n");
+
+    DWT->CYCCNT = 0;
+    t0 = DWT->CYCCNT;
+
+    for (int line = 0; line < 10; line++) {
+        process_thermal_line_fastest(
+            sensor_data,
+            dark_frame,
+            gain_coeff,
+            offset_val,
+            planck_table,
+            line_output,
+            HPIX
+        );
+    }
+
+    t_total = DWT->CYCCNT - t0;
+
+    printf("  Total: %lu cycles (%lu ms)\n", t_total, t_total / 600000);
+    printf("  Per line: %lu cycles (%lu us)\n", t_total / 10, (t_total / 10) / 600);
+
+    full_frame = (t_total / 10) * 480;
+    printf("\n[Extrapolation]\n");
+    printf("  Full frame: %lu cycles (%lu ms)\n", full_frame, full_frame / 600000);
+    printf("  FPS: %lu\n", 600000000 / full_frame);
+
+    line_us = (t_total / 10) / 600;
+    if (line_us <= 41) {
+        printf("  🎉🎉🎉 CAN SUSTAIN 50 FPS! Margin: %lu us 🎉🎉🎉\n", 41 - line_us);
+    } else {
+        printf("  ⚠ Need %lu us faster for 50 FPS\n", line_us - 41);
+    }
+
+    printf("═══════════════════════════════════════\n");
+
+  init_test_data();
+  run_test_thermal_pipelines();
+
+  printf("\n═══ Benchmark complete! ═══\n\n");
+
+
+
+
+  printf("╔════════════════════════════════════════════════╗\n");
+  printf("║ Initializing 50 Hz Thermal Pipeline           ║\n");
+  printf("╚════════════════════════════════════════════════╝\n");
+
+  thermal_check_timer_clock();
+  thermal_vsync_init();
+  thermal_vsync_start();
+
+  printf("Pipeline ready! LED should blink at 50 Hz\n");
+  printf("\n");
 
   // LED Test
   printf("Testing LED...\n");
@@ -997,6 +1918,9 @@ int main(void)
   printf("LED OK!\n\n");
 
   printf("Starting continuous processing...\n");
+  printf("NOTE: Frame buffers now reserved for DCMIPP!\n");
+  printf("      (Benchmark data will be overwritten)\n\n");
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -1111,7 +2035,7 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_PCLK4;
   RCC_ClkInitStruct.CPUCLKSource = RCC_CPUCLKSOURCE_IC1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_IC2_IC6_IC11;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV1;
   RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
