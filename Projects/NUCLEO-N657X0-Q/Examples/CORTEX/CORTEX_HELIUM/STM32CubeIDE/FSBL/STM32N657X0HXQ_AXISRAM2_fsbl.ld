@@ -181,12 +181,13 @@ SECTIONS
     __enoncacheable = .;
   } > RAM
     /* DTCM Section - Fastest memory for LUTs */
-  .dtcm (NOLOAD) :
+  .dtcm :
   {
     . = ALIGN(16);
     *(.dtcm)
+    *(.dtcm*)
     . = ALIGN(16);
-  } > DTCM
+  } >DTCM
 /* Alle großen Arrays in AXISRAM1 - 1 MB ist mehr als genug! */
   .axisram1 (NOLOAD) :
   {

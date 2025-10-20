@@ -75,10 +75,10 @@ XSPI_HandleTypeDef hxspi2;
 // DTCM (128 KB) - Planck LUT
 // ═══════════════════════════════════════════════════════
 
-//__attribute__((section(".dtcm")))
-//uint16_t planck_table[65536];  // 128 KB
-__attribute__((aligned(16), section(".axisram1")))
-uint16_t planck_table[65536];  // ← Move to AXISRAM! (128 KB)
+__attribute__((section(".dtcm")))
+uint16_t planck_table[65536];  // 128 KB
+//__attribute__((aligned(16), section(".axisram1")))
+//uint16_t planck_table[65536];  // ← Move to AXISRAM! (128 KB)
 // ═══════════════════════════════════════════════════════
 // AXISRAM1 (1 MB) - Line processing buffers
 // ═══════════════════════════════════════════════════════
@@ -606,13 +606,13 @@ int main(void)
           printf("Frame time: %lu cycles (%lu ms)\n",
                  cycles, cycles / 600000);
           count = 0;
-          if(led_state) {
-			  LED1_RESET();
-			  led_state = 0;
-		  } else {
-			  LED1_SET();
-			  led_state = 1;
-		  }
+//          if(led_state) {
+//			  LED1_RESET();
+//			  led_state = 0;
+//		  } else {
+//			  LED1_SET();
+//			  led_state = 1;
+//		  }
       }
     }
     /* USER CODE END 3 */
