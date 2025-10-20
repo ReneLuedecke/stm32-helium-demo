@@ -108,6 +108,10 @@ uint16_t temp_line[HPIX];      // 1.3 KB
 __attribute__((aligned(16), section(".axisram1")))
 uint16_t line_output[HPIX];    // 1.3 KB
 
+
+__attribute__((aligned(16), section(".axisram1")))
+uint16_t dark_frame[VPIX][HPIX];
+
 // Total in AXISRAM1: ~5 KB ✓
 
 // ═══════════════════════════════════════════════════════
@@ -170,6 +174,19 @@ volatile uint16_t (*xspi_offset)[HPIX] = (void*)(XSPI_BASE + XSPI_OFFSET_OFFSET)
 volatile uint8_t dcmipp_active_buffer = 0;
 volatile uint8_t frame_ready_for_processing = 0;
 
+typedef enum {
+    CALIB_IDLE,              // Not calibrating
+    CALIB_WAIT_STABLE,       // Waiting for shutter to settle (skip 4 frames)
+    CALIB_COLLECTING,        // Collecting samples (frames 5-16)
+    CALIB_COMPLETE           // Calibration finished
+} CalibState_t;
+
+volatile CalibState_t calib_state = CALIB_IDLE;
+volatile uint32_t calib_frame_count = 0;
+volatile uint32_t calib_samples_collected = 0;
+
+#define CALIB_SKIP_FRAMES 4      // Skip first 4 frames (settling time)
+#define CALIB_TOTAL_SAMPLES 12   // Average 12 frames (frames 5-16)
 
 /* USER CODE END PV */
 
@@ -696,7 +713,121 @@ static inline void process_thermal_line_fastest(
         vst1q_u16(&output[x], result);
     }
 }
+void start_dark_frame_calibration(void) {
+    printf("\n");
+    printf("╔═══════════════════════════════════════════════╗\n");
+    printf("║  Starting Dark Frame Calibration             ║\n");
+    printf("╚═══════════════════════════════════════════════╝\n");
+    printf("\n");
 
+    printf("Parameters:\n");
+    printf("  • Skip frames:    %d (settling time)\n", CALIB_SKIP_FRAMES);
+    printf("  • Sample frames:  %d\n", CALIB_TOTAL_SAMPLES);
+    printf("  • Total time:     ~%d ms\n",
+           (CALIB_SKIP_FRAMES + CALIB_TOTAL_SAMPLES) * 20);
+    printf("\n");
+
+    // Initialize dark frame to zero (will be built up incrementally)
+    printf("Initializing dark frame buffer...\n");
+    for (uint32_t y = 0; y < VPIX; y++) {
+        for (uint32_t x = 0; x < HPIX; x++) {
+            frame_buffer_A[y][x] = 0;  // Use frame_buffer_A as temp storage
+        }
+    }
+
+    // Reset state
+    calib_state = CALIB_WAIT_STABLE;
+    calib_frame_count = 0;
+    calib_samples_collected = 0;
+
+    printf("✓ Ready to capture\n");
+    printf("\nWaiting for shutter to settle...\n");
+}
+
+/**
+ * @brief Process one frame during calibration (call from main loop or ISR)
+ * @param sensor_frame: Pointer to current sensor frame
+ * @return 1 if calibration complete, 0 if still running
+ */
+uint8_t process_calibration_frame(const uint16_t sensor_frame[VPIX][HPIX]) {
+    if (calib_state == CALIB_IDLE || calib_state == CALIB_COMPLETE) {
+        return 1;  // Not calibrating or already done
+    }
+
+    calib_frame_count++;
+
+    // State: Waiting for shutter to settle
+    if (calib_state == CALIB_WAIT_STABLE) {
+        if (calib_frame_count >= CALIB_SKIP_FRAMES) {
+            calib_state = CALIB_COLLECTING;
+            printf("Shutter stable. Collecting samples...\n");
+        }
+        return 0;  // Still running
+    }
+
+    // State: Collecting samples
+    if (calib_state == CALIB_COLLECTING) {
+        calib_samples_collected++;
+
+        printf("  Sample %lu/%d...\n",
+               calib_samples_collected, CALIB_TOTAL_SAMPLES);
+
+        // Incremental averaging (no accumulator needed!)
+        // avg_new = avg_old + (sample - avg_old) / n
+
+        for (uint32_t y = 0; y < VPIX; y++) {
+            for (uint32_t x = 0; x < HPIX; x++) {
+                uint16_t current_avg = frame_buffer_A[y][x];
+                uint16_t new_sample = sensor_frame[y][x];
+
+                // Incremental average
+                int32_t diff = (int32_t)new_sample - (int32_t)current_avg;
+                int32_t delta = diff / (int32_t)calib_samples_collected;
+                int32_t new_avg = (int32_t)current_avg + delta;
+
+                // Clamp to valid range
+                if (new_avg < 0) new_avg = 0;
+                if (new_avg > 65535) new_avg = 65535;
+
+                frame_buffer_A[y][x] = (uint16_t)new_avg;
+            }
+        }
+
+        // Check if done
+        if (calib_samples_collected >= CALIB_TOTAL_SAMPLES) {
+            calib_state = CALIB_COMPLETE;
+
+            printf("\n✓ Calibration complete!\n");
+            printf("  Total frames: %lu\n", calib_frame_count);
+            printf("  Samples used: %lu\n", calib_samples_collected);
+            printf("\n");
+
+            printf("Copying to dark_frame array...\n");
+            for (uint32_t y = 0; y < VPIX; y++) {
+                for (uint32_t x = 0; x < HPIX; x++) {
+                    dark_frame[y][x] = frame_buffer_A[y][x];
+                }
+            }
+            printf("✓ Dark frame stored in AXISRAM1\n");
+
+            printf("Dark frame ready for use.\n");
+            printf("\n");
+
+            return 1;  // Complete!
+        }
+
+        return 0;  // Still collecting
+    }
+
+    return 1;  // Should not reach here
+}
+
+/**
+ * @brief Check if calibration is in progress
+ */
+uint8_t is_calibrating(void) {
+    return (calib_state != CALIB_IDLE && calib_state != CALIB_COMPLETE);
+}
 /* USER CODE END 4 */
 /* USER CODE END 0 */
 
@@ -899,12 +1030,25 @@ int main(void)
       /* USER CODE BEGIN 3 */
 
       DWT->CYCCNT = 0;
+      if (is_calibrating()) {
+		  // During calibration: Just collect samples
+		  // (Assuming sensor writes to frame_buffer_B)
+
+		  if (process_calibration_frame(frame_buffer_B)) {
+			  // Calibration complete!
+			  printf("Returning to normal processing...\n\n");
+		  }
+
+		  // Skip normal processing during calibration
+		  HAL_Delay(20);  // Wait for next frame (~50 Hz)
+		  continue;
+	  }
       //LED1_SET();
       // Process all lines with fastest pipeline
       for (int line = 0; line < VPIX; line++) {
           process_thermal_line_fastest(
               frame_buffer_A[line],    // Raw sensor (dummy)
-              dark_line,               // Dark frame
+			  dark_frame[line],        // Dark frame
               gain_line,               // Gain coefficients (Q15)
               temp_line,               // Offset (reused buffer)
               planck_table,            // Planck LUT
@@ -915,7 +1059,7 @@ int main(void)
       //LED1_RESET();
 
       uint32_t cycles = DWT->CYCCNT;
-      if (++count >= 100) {
+      if (++count >= 1000) {
           printf("Frame time: %lu cycles (%lu ms)\n",
                  cycles, cycles / 600000);
           count = 0;
@@ -926,6 +1070,7 @@ int main(void)
 //			  LED1_SET();
 //			  led_state = 1;
 //		  }
+          start_dark_frame_calibration();
       }
     }
     /* USER CODE END 3 */
