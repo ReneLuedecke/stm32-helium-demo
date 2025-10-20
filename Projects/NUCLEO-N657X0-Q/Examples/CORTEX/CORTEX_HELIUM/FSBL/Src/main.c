@@ -88,13 +88,10 @@ XSPI_HandleTypeDef hxspi2;
 // DTCM (128 KB) - Planck LUT
 // ═══════════════════════════════════════════════════════
 
-__attribute__((section(".dtcm")))
-uint16_t planck_table[65536];  // 128 KB
-//__attribute__((aligned(16), section(".axisram1")))
-//uint16_t planck_table[65536];  // ← Move to AXISRAM! (128 KB)
-// ═══════════════════════════════════════════════════════
-// AXISRAM1 (1 MB) - Line processing buffers
-// ═══════════════════════════════════════════════════════
+//__attribute__((section(".dtcm")))
+//uint16_t planck_table[65536];  // 128 KB
+__attribute__((aligned(64), section(".axisram1")))
+uint16_t planck_table[65536];
 
 __attribute__((aligned(16), section(".axisram1")))
 uint16_t gain_line[HPIX];      // 1.3 KB
@@ -109,9 +106,6 @@ __attribute__((aligned(16), section(".axisram1")))
 uint16_t line_output[HPIX];    // 1.3 KB
 
 
-__attribute__((aligned(16), section(".axisram1")))
-uint16_t dark_frame[VPIX][HPIX];
-
 // Total in AXISRAM1: ~5 KB ✓
 
 // ═══════════════════════════════════════════════════════
@@ -125,6 +119,15 @@ uint16_t frame_buffer_A[VPIX][HPIX];  // 614 KB
 __attribute__((section(".noncacheable")))
 uint16_t frame_buffer_B[VPIX][HPIX];  // 614 KB
 
+__attribute__((section(".noncacheable")))
+uint16_t dark_frame[VPIX][HPIX];  // 614 KB ← Main RAM!
+//__attribute__((aligned(16)))
+//uint16_t dark_frame[VPIX][HPIX];  // 614 KB ← Main RAM!
+
+//__attribute__((aligned(16)))
+//uint16_t gain_frame[VPIX][HPIX];  // 614 KB
+__attribute__((aligned(16), section(".axisram1")))
+uint16_t gain_frame[VPIX][HPIX];  // 614 KB ✓ FASTEST ACCESS!
 // Total: 1228 KB ✓ Fits perfectly!
 
 // ═══════════════════════════════════════════════════════
@@ -187,6 +190,112 @@ volatile uint32_t calib_samples_collected = 0;
 
 #define CALIB_SKIP_FRAMES 4      // Skip first 4 frames (settling time)
 #define CALIB_TOTAL_SAMPLES 12   // Average 12 frames (frames 5-16)
+
+/* USER CODE BEGIN PV */
+
+
+// ==== Flag & LUT helpers (Prototypen) ====
+static inline uint16_t encode_temp_to_lut(float t_c, float flag_ref_c);
+static uint16_t inv_lut_find_adc_by_temp(const uint16_t *lut, float t_flag_c, float flag_ref_c);
+
+// ==== Globale Flag-/Temp-Parameter ====
+// Wird bei Dark-Cal gesetzt; initial ein sinnvoller Default:
+volatile uint16_t g_flag_adc = 0;
+volatile float    g_last_flag_temp_c = 30.0f; // °C, Beispielwert
+
+// ==== Chip-Temp/Alpha Fallbacks ====
+// TODO: Später aus echter Telemetrie befüllen!
+static float T_chip_c  = 40.0f;   // aktuelle Chiptemp °C
+static float T0_chip_c = 25.0f;   // Referenz °C
+static float alpha     = 0.0025f; // Gain-Tempkoeffizient 1/°C
+
+// ==== Unity Q15 Linie für Fallbacks ====
+__attribute__((aligned(16), section(".axisram1")))
+static uint16_t g_unity_q15_line[HPIX]; // wird mit 0x7FFF gefüllt
+
+// Falls du Pixel-Maps aus XSPI hast, kannst du diese Pointer setzen.
+// Bleiben sie NULL, verwenden wir Unity (1.0 in Q15).
+static const uint16_t (*sensor_gain_q15)[HPIX] = NULL;    // optional extern liefern
+static const uint16_t (*vignetting_q15)[HPIX]  = NULL;    // optional extern liefern
+
+
+
+__attribute__((aligned(16), section(".axisram1")))
+static uint16_t offset_line[HPIX]= {0};             // Arbeitsbuffer
+
+static float last_T_chip_c = 0.0f;  // Track temperature changes
+
+
+//BadPixel
+#define MAX_BAD_PIXELS ((N * 15) / 1000)  // 1.5% = 4608 pixels
+
+typedef struct {
+    uint16_t x;          // Bad pixel X coordinate in this line
+    uint16_t rep_x;      // Replacement pixel X coordinate
+    int8_t   rep_dy;     // Replacement line offset (-1, 0, +1)
+} BadPixelInLine_t;  // 5 bytes
+
+typedef struct {
+    uint16_t count;      // Number of bad pixels in this line
+    uint16_t offset;     // Offset into bad_pixels_sorted array
+} LineInfo_t;  // 4 bytes
+
+__attribute__((aligned(16), section(".axisram1")))
+LineInfo_t bad_pixel_line_info[VPIX];  // 480 × 4 = 1,920 bytes
+
+__attribute__((aligned(16), section(".axisram1")))
+BadPixelInLine_t bad_pixels_sorted[MAX_BAD_PIXELS];  // 4608 × 5 = 23 KB
+
+
+typedef struct {
+    uint32_t dst;  // y*HPIX + x
+    uint32_t src;  // (y+dy)*HPIX + rx
+} PixPatch;
+
+__attribute__((aligned(64), section(".axisram1")))
+static PixPatch g_patches[MAX_BAD_PIXELS];
+
+__attribute__((aligned(16), section(".axisram1")))
+static uint16_t g_patch_values[MAX_BAD_PIXELS];   // 1. Phase: Quellen puffern
+
+static uint32_t g_num_patches = 0;
+
+
+uint16_t total_bad_pixels = 0;
+
+typedef struct {
+    uint16_t x;
+    uint16_t y;
+    uint16_t rep_x;
+    uint16_t rep_y;
+} BadPixelFactory_t;
+//test data
+const BadPixelFactory_t factory_bad_pixels[] = {
+    {100, 50, 101, 50},
+    {200, 100, 199, 100},
+    {320, 240, 320, 239},
+	{400, 300, 401, 300},
+	{500, 400, 500, 401},
+	{600, 450, 599, 450},
+	{150, 200, 150, 199},
+	{250, 350, 251, 350},
+	{350, 150, 350, 151},
+	{450, 250, 449, 250},
+	{550, 350, 550, 349},
+	{650, 400, 651, 400},
+	{120, 220, 120, 221},
+	{220, 320, 221, 320},
+	{320, 420, 320, 419},
+	{420, 120, 419, 120},
+	{520, 220, 520, 221},
+	{620, 320, 621, 320},
+	{130, 230, 130, 229},
+	{230, 330, 231, 330},
+    // ... up to 4608 entries (1.5%)
+};
+
+const uint16_t factory_bad_pixel_count =
+    sizeof(factory_bad_pixels) / sizeof(factory_bad_pixels[0]);
 
 /* USER CODE END PV */
 
@@ -683,43 +792,45 @@ static inline void DWT_CycleCounter_Init(void)
 static inline void process_thermal_line_fastest(
     const uint16_t * __restrict__ sensor_data,
     const uint16_t * __restrict__ dark,
-    const uint16_t * __restrict__ gain,
-    const uint16_t * __restrict__ offset,
+    const uint16_t * __restrict__ gain,     // Q15 pro Pixel
+    const uint16_t * __restrict__ offset,   // pixelbezogener Offset (ADC-Domain)
     const uint16_t * __restrict__ planck_lut,
     uint16_t * __restrict__ output,
     uint32_t width)
 {
+    const uint16x8_t flag_vec = vdupq_n_u16(g_flag_adc);
+
     for (uint32_t x = 0; x < width; x += 8)
     {
         // Load
-        uint16x8_t adc = vld1q_u16(&sensor_data[x]);
-        uint16x8_t dark_val = vld1q_u16(&dark[x]);
-        uint16x8_t gain_val = vld1q_u16(&gain[x]);
-
+        uint16x8_t adc   = vld1q_u16(&sensor_data[x]);
+        uint16x8_t darkv = vld1q_u16(&dark[x]);
+        uint16x8_t gainv = vld1q_u16(&gain[x]);
+        uint16x8_t offv  = vld1q_u16(&offset[x]);
 
         // Dark subtract
-        uint16x8_t corrected = vqsubq_u16(adc, dark_val);
+        uint16x8_t corr  = vqsubq_u16(adc, darkv);
 
-        // ⭐ Gain (Q15) - Reinterpret as signed, multiply, reinterpret back
-        int16x8_t corrected_s = vreinterpretq_s16_u16(corrected);
-        int16x8_t gain_s = vreinterpretq_s16_u16(gain_val);
-        int16x8_t result_s = vqrdmulhq_s16(corrected_s, gain_s);
-        uint16x8_t result = vreinterpretq_u16_s16(result_s);
+        // Gain Q15  (corr * gain >> 15)  — wie bisher
+        int16x8_t  corr_s = vreinterpretq_s16_u16(corr);
+        int16x8_t  gain_s = vreinterpretq_s16_u16(gainv);
+        int16x8_t  mul_s  = vqrdmulhq_s16(corr_s, gain_s);
+        uint16x8_t val    = vreinterpretq_u16_s16(mul_s);
 
-        // Planck LUT
-        result = vldrhq_gather_shifted_offset_u16(planck_lut, result);
+        // + InvPlanck(T_flag) (Skalar)  + pixelbezogener Offset
+        val = vqaddq_u16(val, flag_vec);
+        val = vqaddq_u16(val, offv);
+
+        // LUT
+        uint16x8_t out = vldrhq_gather_shifted_offset_u16(planck_lut, val);
 
         // Store
-        vst1q_u16(&output[x], result);
+        vst1q_u16(&output[x], out);
     }
 }
+
 void start_dark_frame_calibration(void) {
     printf("\n");
-    printf("╔═══════════════════════════════════════════════╗\n");
-    printf("║  Starting Dark Frame Calibration             ║\n");
-    printf("╚═══════════════════════════════════════════════╝\n");
-    printf("\n");
-
     printf("Parameters:\n");
     printf("  • Skip frames:    %d (settling time)\n", CALIB_SKIP_FRAMES);
     printf("  • Sample frames:  %d\n", CALIB_TOTAL_SAMPLES);
@@ -812,6 +923,9 @@ uint8_t process_calibration_frame(const uint16_t sensor_frame[VPIX][HPIX]) {
 
             printf("Dark frame ready for use.\n");
             printf("\n");
+            // Nach Abschluss der Kalibrierung:
+            unsigned enc = (unsigned)((g_last_flag_temp_c - FLAG_TEMP_CELSIUS) * TEMP_SCALE + TEMP_OFFSET);
+            printf("✓ Flag ADC set: %u (T_flag_enc=%u)\n", g_flag_adc, enc);
 
             return 1;  // Complete!
         }
@@ -835,6 +949,327 @@ uint8_t is_calibrating(void) {
   * @brief  The application entry point.
   * @retval int
   */
+
+// Kodierung wie in generate_*_lut: (T_rel*100)+10000
+static inline uint16_t encode_temp_to_lut(float t_c, float flag_ref_c)
+{
+    // gleiche Kodierung wie in deiner LUT-Generierung
+    int32_t out = (int32_t)lrintf((t_c - flag_ref_c) * TEMP_SCALE) + (int32_t)TEMP_OFFSET;
+    if (out < 0)      out = 0;
+    if (out > 65535)  out = 65535;
+    return (uint16_t)out;
+}
+
+static uint16_t inv_lut_find_adc_by_temp(const uint16_t *lut, float t_flag_c, float flag_ref_c)
+{
+    const uint16_t target = encode_temp_to_lut(t_flag_c, flag_ref_c);
+    uint32_t lo = 0, hi = 65535;
+    while (lo < hi) {
+        uint32_t mid = (lo + hi) >> 1;
+        uint16_t v = lut[mid];
+        if (v < target) lo = mid + 1; else hi = mid;
+    }
+    return (uint16_t)lo;
+}
+
+
+static inline void mve_copy_u16(uint16_t *dst, const uint16_t *src, int n) {
+    int i = 0;
+    for (; i <= n - 16; i += 16) {
+        uint16x8_t a = vld1q_u16(src + i + 0);
+        uint16x8_t b = vld1q_u16(src + i + 8);
+        vst1q_u16(dst + i + 0, a);
+        vst1q_u16(dst + i + 8, b);
+    }
+    // Handle remaining
+    for (; i < n; i++) {
+        dst[i] = src[i];
+    }
+}
+
+
+// ===== Q15 Helpers =====
+// Q15: signed 1.15 (−1.0 .. +0.99997). Deine Gains sind >=0, also typ. 0..+0.999.
+// Speicherung als uint16_t, Re-Interpretation als int16_t für MVE.
+
+static inline uint16_t q15_from_float(float x) {
+    // clamp + round to nearest
+    if (x < -0.999969f) x = -0.999969f;
+    if (x >  0.999969f) x =  0.999969f;
+    int32_t v = (int32_t)lrintf(x * 32768.0f);  // 1<<15
+    if (v < -32768) v = -32768;
+    if (v >  32767) v =  32767;
+    return (uint16_t)(int16_t)v;
+}
+
+static inline uint16_t q15_mul_scalar_u16(uint16_t a_q15, uint16_t b_q15) {
+    // (a*b + 0.5 ulp) >> 15  with saturation to Q15 range
+    int16_t a = (int16_t)a_q15, b = (int16_t)b_q15;
+    int32_t p = (int32_t)a * (int32_t)b;       // Q30
+    p = (p + (1<<14)) >> 15;                   // round to Q15
+    if (p < -32768) p = -32768;
+    if (p >  32767) p =  32767;
+    return (uint16_t)(int16_t)p;
+}
+
+// ===== 1) Q15 line-wise multiply: dst = a ⊗ b (Q15) =====
+static inline void q15_mul_u16_line(uint16_t * __restrict__ dst,
+                                    const uint16_t * __restrict__ a,
+                                    const uint16_t * __restrict__ b,
+                                    uint32_t n)
+{
+    uint32_t i = 0;
+    for (; i + 8 <= n; i += 8) {
+        int16x8_t va = vreinterpretq_s16_u16(vld1q_u16(&a[i]));
+        int16x8_t vb = vreinterpretq_s16_u16(vld1q_u16(&b[i]));
+        // Q15*Q15 -> Q15 (rounded high mul with saturation)
+        int16x8_t vm = vqrdmulhq_s16(va, vb);
+        vst1q_u16(&dst[i], vreinterpretq_u16_s16(vm));
+    }
+    for (; i < n; ++i) {
+        dst[i] = q15_mul_scalar_u16(a[i], b[i]);
+    }
+}
+// ===== 2) build_gain_line: dst = sensor_gain ⊗ vignetting ⊗ temp_gain  =====
+// temp_gain_q15 = q15_from_float( 1.0f / (1.0f + alpha * (T_chip - T0_chip)) * cos4_global_scale )
+// Hinweis: vignetting ist bereits cos^4(theta) in Q15.
+//          sensor_gain ist deine per-Pixel Gain-Map in Q15.
+//          temp_gain ist ein *Skalar* in Q15 (pro Frame).
+
+static inline void build_gain_line(uint16_t * __restrict__ dst,
+                                   const uint16_t * __restrict__ sensor_gain_q15,
+                                   const uint16_t * __restrict__ vignetting_q15,
+                                   uint16_t temp_gain_q15,
+                                   uint32_t n)
+{
+    int16x8_t vtemp = vdupq_n_s16((int16_t)temp_gain_q15);
+    uint32_t i = 0;
+    for (; i + 8 <= n; i += 8) {
+        // load
+        int16x8_t vsg = vreinterpretq_s16_u16(vld1q_u16(&sensor_gain_q15[i]));
+        int16x8_t vvg = vreinterpretq_s16_u16(vld1q_u16(&vignetting_q15[i]));
+        // mul1 = sg ⊗ vign
+        int16x8_t vm1 = vqrdmulhq_s16(vsg, vvg);
+        // mul2 = mul1 ⊗ temp_gain
+        int16x8_t vm2 = vqrdmulhq_s16(vm1, vtemp);
+        // store
+        vst1q_u16(&dst[i], vreinterpretq_u16_s16(vm2));
+    }
+    for (; i < n; ++i) {
+        uint16_t m1 = q15_mul_scalar_u16(sensor_gain_q15[i], vignetting_q15[i]);
+        dst[i] = q15_mul_scalar_u16(m1, temp_gain_q15);
+    }
+}
+
+void init_gain_frame(void) {
+    printf("Initializing gain frame...\n");
+
+    // Unity gain for all pixels (for now)
+    for (uint32_t y = 0; y < VPIX; y++) {
+        for (uint32_t x = 0; x < HPIX; x++) {
+            gain_frame[y][x] = 0x7FFF;  // Unity gain (Q15)
+        }
+    }
+
+    last_T_chip_c = T_chip_c;
+    printf("✓ Gain frame initialized\n");
+}
+
+static inline void correct_bad_pixels_line_fast(
+    uint16_t * __restrict__ output_line,
+    const uint16_t * __restrict__ prev_line,
+    const uint16_t * __restrict__ next_line,
+    uint16_t y)
+{
+    const uint16_t count = bad_pixel_line_info[y].count;
+    if (count == 0) return;  // No bad pixels in this line!
+
+    const uint16_t offset = bad_pixel_line_info[y].offset;
+    const BadPixelInLine_t *pixels = &bad_pixels_sorted[offset];
+
+    // Process all bad pixels in this line
+    for (uint16_t i = 0; i < count; i++) {
+        const uint16_t x = pixels[i].x;
+        const uint16_t rx = pixels[i].rep_x;
+        const int8_t dy = pixels[i].rep_dy;
+
+        // Select source based on line offset
+        if (dy == 0) {
+            // Same line (most common case!)
+            output_line[x] = output_line[rx];
+        }
+        else if (dy == -1 && prev_line) {
+            // Previous line
+            output_line[x] = prev_line[rx];
+        }
+        else if (dy == 1 && next_line) {
+            // Next line
+            output_line[x] = next_line[rx];
+        }
+        // else: Edge case, skip
+    }
+}
+
+void load_bad_pixel_map(void) {
+    printf("Loading bad pixel map...\n");
+
+    // ═══════════════════════════════════════════════════════════════
+    // 1. Initialize line info
+    // ═══════════════════════════════════════════════════════════════
+    for (uint16_t y = 0; y < VPIX; y++) {
+        bad_pixel_line_info[y].count = 0;
+        bad_pixel_line_info[y].offset = 0;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 2. Load from factory calibration
+    // ═══════════════════════════════════════════════════════════════
+    extern const BadPixelFactory_t factory_bad_pixels[];
+    extern const uint16_t factory_bad_pixel_count;
+
+    uint16_t current_offset = 0;
+
+    for (uint16_t y = 0; y < VPIX; y++) {
+        bad_pixel_line_info[y].offset = current_offset;
+
+        for (uint16_t i = 0; i < factory_bad_pixel_count; i++) {
+            if (factory_bad_pixels[i].y != y) continue;
+
+            uint16_t x  = factory_bad_pixels[i].x;
+            uint16_t rx = factory_bad_pixels[i].rep_x;
+            uint16_t ry = factory_bad_pixels[i].rep_y;
+
+            // Bounds check
+            if (x >= HPIX || y >= VPIX || rx >= HPIX || ry >= VPIX) {
+                continue;
+            }
+
+            if (current_offset >= MAX_BAD_PIXELS) {
+                printf("BPR: Max bad pixels reached!\n");
+                break;
+            }
+
+            // Store in sorted list
+            bad_pixels_sorted[current_offset].x      = x;
+            bad_pixels_sorted[current_offset].rep_x  = rx;
+            bad_pixels_sorted[current_offset].rep_dy = (int8_t)(ry - y);
+
+            // Mark as bad in gain frame
+            gain_frame[y][x] = 0;
+
+            current_offset++;
+            bad_pixel_line_info[y].count++;
+        }
+    }
+
+    total_bad_pixels = current_offset;
+
+    printf("✓ Loaded %u bad pixels\n", total_bad_pixels);
+
+    // ═══════════════════════════════════════════════════════════════
+    // 3. Build patches (ONLY if we have bad pixels!)
+    // ═══════════════════════════════════════════════════════════════
+    if (total_bad_pixels > 0) {
+        build_bad_pixel_patches();
+    } else {
+        printf("BPR: No bad pixels to process\n");
+        g_num_patches = 0;
+    }
+}
+void build_bad_pixel_patches(void)
+{
+    g_num_patches = 0;
+    uint32_t dropped = 0;
+
+    // ═══════════════════════════════════════════════════════════════
+    // SAFETY: Check if bad pixel data is valid
+    // ═══════════════════════════════════════════════════════════════
+    if (total_bad_pixels == 0) {
+        printf("BPR: No bad pixels to build patches from\n");
+        return;
+    }
+
+    for (uint16_t y = 0; y < VPIX; ++y) {
+        const uint16_t cnt  = bad_pixel_line_info[y].count;
+        const uint16_t off  = bad_pixel_line_info[y].offset;
+
+        // ═══════════════════════════════════════════════════════════
+        // SAFETY: Bounds check on offset and count
+        // ═══════════════════════════════════════════════════════════
+        if (off >= MAX_BAD_PIXELS) {
+            printf("BPR: Invalid offset %u at line %u\n", off, y);
+            continue;
+        }
+
+        if (cnt == 0) continue;  // No bad pixels in this line
+
+        if (off + cnt > MAX_BAD_PIXELS) {
+            printf("BPR: Overflow at line %u (off=%u cnt=%u)\n", y, off, cnt);
+            continue;
+        }
+
+        const BadPixelInLine_t *px = &bad_pixels_sorted[off];
+
+        for (uint16_t i = 0; i < cnt; ++i) {
+            int16_t ry = (int16_t)y + (int16_t)px[i].rep_dy;
+            uint16_t x  = px[i].x;
+            uint16_t rx = px[i].rep_x;
+
+            // Bounds check
+            if (ry < 0 || ry >= (int16_t)VPIX || x >= HPIX || rx >= HPIX) {
+                dropped++;
+                continue;
+            }
+
+            if (g_num_patches >= MAX_BAD_PIXELS) {
+                printf("BPR: Reached max patches limit!\n");
+                break;
+            }
+
+            g_patches[g_num_patches].dst = (uint32_t)y  * HPIX + x;
+            g_patches[g_num_patches].src = (uint32_t)ry * HPIX + rx;
+            g_num_patches++;
+        }
+
+        if (g_num_patches >= MAX_BAD_PIXELS) break;
+    }
+
+    if (dropped > 0) {
+        printf("BPR: dropped %lu out-of-range entries\n", (unsigned long)dropped);
+    }
+    printf("BPR: %lu valid patches\n", (unsigned long)g_num_patches);
+}
+static inline void apply_bad_pixel_patches(uint16_t * __restrict__ frame, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; ++i)
+        g_patch_values[i] = frame[g_patches[i].src];
+
+    for (uint32_t i = 0; i < count; ++i)
+        frame[g_patches[i].dst] = g_patch_values[i];
+}
+// Simple version (same-line only):
+static inline void correct_bad_pixels_simple(uint16_t frame[VPIX][HPIX]) {
+    for (uint16_t i = 0; i < total_bad_pixels; i++) {
+        // Find line
+        uint16_t y = 0;
+        for (y = 0; y < VPIX; y++) {
+            uint16_t offset = bad_pixel_line_info[y].offset;
+            uint16_t count = bad_pixel_line_info[y].count;
+            if (i >= offset && i < offset + count) break;
+        }
+
+        // Get pixel
+        uint16_t idx = i - bad_pixel_line_info[y].offset;
+        uint16_t x = bad_pixels_sorted[bad_pixel_line_info[y].offset + idx].x;
+        uint16_t rx = bad_pixels_sorted[bad_pixel_line_info[y].offset + idx].rep_x;
+        int8_t dy = bad_pixels_sorted[bad_pixel_line_info[y].offset + idx].rep_dy;
+
+        // Replace
+        if (dy == 0 && rx < HPIX) {
+            frame[y][x] = frame[y][rx];
+        }
+    }
+}
 int main(void)
 {
 
@@ -870,20 +1305,11 @@ int main(void)
   /* USER CODE BEGIN 2 */
   /* USER CODE BEGIN 2 */
 
-    // ═══════════════════════════════════════════════════════════════════
-    // STM32N6 Thermal Imaging System - Production Code
-    // 66 FPS Processing Pipeline (31 us/line)
-    // ═══════════════════════════════════════════════════════════════════
-
-    printf("\n");
-    printf("╔════════════════════════════════════════════════╗\n");
-    printf("║  STM32N6 Thermal Imaging System               ║\n");
-    printf("║  Production Code - 66 FPS Pipeline            ║\n");
-    printf("╚════════════════════════════════════════════════╝\n");
     printf("\n");
 
 
     init_planck_lut();
+    for (uint32_t i = 0; i < HPIX; ++i) g_unity_q15_line[i] = 0x7FFF; // ~+0.999 in Q15
 
     // ────────────────────────────────────────────────────────────────────
     // Initialize XSPI Memory-Mapped Mode
@@ -966,20 +1392,10 @@ int main(void)
 
     printf("✓ XSPI Memory-Mapped Mode ready\n");
 
-    // ────────────────────────────────────────────────────────────────────
-    // Initialize Thermal Pipeline
-    // ────────────────────────────────────────────────────────────────────
     printf("\nInitializing thermal pipeline...\n");
 
     // Initialize DWT cycle counter
     DWT_CycleCounter_Init();
-
-    // Initialize Planck LUT (dummy for now)
-    printf("  • Planck LUT...");
-    for (uint32_t i = 0; i < 65536; i++) {
-        planck_table[i] = (uint16_t)i;  // TODO: Real Planck function
-    }
-    printf(" ✓\n");
 
     // Initialize test data (dummy sensor frame)
     printf("  • Test pattern...");
@@ -999,20 +1415,11 @@ int main(void)
     }
     printf(" ✓\n");
 
-    // ────────────────────────────────────────────────────────────────────
-    // Initialize 50 Hz Timer (VSYNC simulation)
-    // ────────────────────────────────────────────────────────────────────
+
     printf("\nInitializing 50 Hz VSYNC timer...\n");
     thermal_vsync_init();
     thermal_vsync_start();
 
-    printf("\n");
-    printf("╔════════════════════════════════════════════════╗\n");
-    printf("║  System Ready!                                 ║\n");
-    printf("║  Processing @ 66 FPS (31 us/line)             ║\n");
-    printf("║  LED toggle @ 66 Hz (visible on oscilloscope) ║\n");
-    printf("╚════════════════════════════════════════════════╝\n");
-    printf("\n");
 
     /* USER CODE END 2 */
 
@@ -1021,8 +1428,10 @@ int main(void)
 
     //uint32_t frame_count = 0;
     //uint32_t last_perf_check = HAL_GetTick();
+    load_bad_pixel_map();
+    init_gain_frame();
     static uint8_t led_state = 0;
-    static int count = 0;
+    static int count =1000;
     while (1)
     {
       /* USER CODE END WHILE */
@@ -1043,21 +1452,46 @@ int main(void)
 		  HAL_Delay(20);  // Wait for next frame (~50 Hz)
 		  continue;
 	  }
-      //LED1_SET();
-      // Process all lines with fastest pipeline
-      for (int line = 0; line < VPIX; line++) {
-          process_thermal_line_fastest(
-              frame_buffer_A[line],    // Raw sensor (dummy)
-			  dark_frame[line],        // Dark frame
-              gain_line,               // Gain coefficients (Q15)
-              temp_line,               // Offset (reused buffer)
-              planck_table,            // Planck LUT
-              frame_buffer_B[line],    // Output
-              HPIX
-          );
-      }
-      //LED1_RESET();
 
+	  float temp_diff = fabsf(T_chip_c - last_T_chip_c);
+		 //if (temp_diff > 0.5f) {  // Only update if >0.5°C change
+			 // Recompute gain frame (do this OUTSIDE the line loop!)
+			 float dT = (T_chip_c - T0_chip_c);
+			 float temp_gain_f = 1.0f / (1.0f + alpha * dT);
+			 uint16_t temp_gain_q15 = q15_from_float(temp_gain_f);
+
+			 // Update all pixels (this takes ~5 ms, but only when needed!)
+			 for (uint32_t y = 0; y < VPIX; y++) {
+				 for (uint32_t x = 0; x < HPIX; x++) {
+					 // gain_frame[y][x] = sensor_gain × vignetting × temp_gain
+					 // For now: just apply temp_gain to unity
+					 gain_frame[y][x] = q15_mul_scalar_u16(0x7FFF, temp_gain_q15);
+				 }
+			 }
+
+			 last_T_chip_c = T_chip_c;
+		// }
+
+	 for (int line = 0; line < VPIX; ++line)
+		 {
+			 process_thermal_line_fastest(
+				 frame_buffer_A[line],
+				 dark_frame[line],
+				 gain_frame[line],  // ✓ Pre-computed!
+				 offset_line,       // ✓ Static for now
+				 planck_table,
+				 frame_buffer_B[line],
+				 HPIX
+			 );
+
+		 }
+//	 apply_bad_pixel_patches(&frame_buffer_B[0][0], g_num_patches);
+	 correct_bad_pixels_simple(frame_buffer_B);
+      //LED1_RESET();
+	 volatile uint32_t checksum = 0;
+	     for (int y = 0; y < VPIX; y += 10) {
+	         checksum += frame_buffer_B[y][0];
+	     }
       uint32_t cycles = DWT->CYCCNT;
       if (++count >= 1000) {
           printf("Frame time: %lu cycles (%lu ms)\n",
@@ -1070,7 +1504,7 @@ int main(void)
 //			  LED1_SET();
 //			  led_state = 1;
 //		  }
-          start_dark_frame_calibration();
+         start_dark_frame_calibration();
       }
     }
     /* USER CODE END 3 */
