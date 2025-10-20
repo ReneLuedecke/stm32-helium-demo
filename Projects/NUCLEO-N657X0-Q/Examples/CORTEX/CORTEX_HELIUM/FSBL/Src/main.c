@@ -1358,6 +1358,7 @@ static inline void process_thermal_line_fastest(
     uint16_t * __restrict__ output,
     uint32_t width)
 {
+	uint16_t last_valid = 0;  // <-- Carry zwischen 8er-Blöcken
     for (uint32_t x = 0; x < width; x += 8)
     {
         // Load
@@ -1375,8 +1376,26 @@ static inline void process_thermal_line_fastest(
         int16x8_t result_s = vqrdmulhq_s16(corrected_s, gain_s);
         uint16x8_t result = vreinterpretq_u16_s16(result_s);
 
+        uint16_t last_valid = 0;
         // Add offset
-        result = vqaddq_u16(result, offset_val);
+//        result = vqaddq_u16(result, offset_val);
+//        // -------- Primitive BPC (gain==0 -> vorheriges gültiges Pixel) --------
+//		// Lane-Operationen mit *konstanten* Indizes (keine Loop-Variable!)
+//		{
+//			uint16_t l = last_valid;
+//
+//			uint16_t g0 = vgetq_lane_u16(gain_val, 0); uint16_t r0 = vgetq_lane_u16(result, 0); if (g0 == 0) r0 = l; else l = r0; result = vsetq_lane_u16(r0, result, 0);
+//			uint16_t g1 = vgetq_lane_u16(gain_val, 1); uint16_t r1 = vgetq_lane_u16(result, 1); if (g1 == 0) r1 = l; else l = r1; result = vsetq_lane_u16(r1, result, 1);
+//			uint16_t g2 = vgetq_lane_u16(gain_val, 2); uint16_t r2 = vgetq_lane_u16(result, 2); if (g2 == 0) r2 = l; else l = r2; result = vsetq_lane_u16(r2, result, 2);
+//			uint16_t g3 = vgetq_lane_u16(gain_val, 3); uint16_t r3 = vgetq_lane_u16(result, 3); if (g3 == 0) r3 = l; else l = r3; result = vsetq_lane_u16(r3, result, 3);
+//			uint16_t g4 = vgetq_lane_u16(gain_val, 4); uint16_t r4 = vgetq_lane_u16(result, 4); if (g4 == 0) r4 = l; else l = r4; result = vsetq_lane_u16(r4, result, 4);
+//			uint16_t g5 = vgetq_lane_u16(gain_val, 5); uint16_t r5 = vgetq_lane_u16(result, 5); if (g5 == 0) r5 = l; else l = r5; result = vsetq_lane_u16(r5, result, 5);
+//			uint16_t g6 = vgetq_lane_u16(gain_val, 6); uint16_t r6 = vgetq_lane_u16(result, 6); if (g6 == 0) r6 = l; else l = r6; result = vsetq_lane_u16(r6, result, 6);
+//			uint16_t g7 = vgetq_lane_u16(gain_val, 7); uint16_t r7 = vgetq_lane_u16(result, 7); if (g7 == 0) r7 = l; else l = r7; result = vsetq_lane_u16(r7, result, 7);
+//
+//			last_valid = l;
+//		}
+		// ----------------------------------------------------------------------
 
         // Planck LUT
         result = vldrhq_gather_shifted_offset_u16(planck_lut, result);
