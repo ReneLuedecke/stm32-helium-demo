@@ -33,10 +33,11 @@
 #define SENSOR_WIDTH  HPIX
 #define SENSOR_HEIGHT VPIX
 
-#define LED1_SET()    (GPIOG->BSRR = LED1_Pin)
-#define LED1_RESET()  (GPIOG->BSRR = (LED1_Pin << 16))
+// LED1 Definition
 #define LED1_Pin GPIO_PIN_8
 #define LED1_GPIO_Port GPIOG
+#define LED1_SET()    (GPIOG->BSRR = LED1_Pin)
+#define LED1_RESET()  (GPIOG->BSRR = (LED1_Pin << 16))
 
 #define CYCLES_TO_MS(cycles) ((cycles) / 600000)
 #define CYCLES_TO_US(cycles) ((cycles) / 600)
@@ -169,8 +170,8 @@ static void MX_XSPI2_Init(void);
 static inline uint16_t gain_to_q15(float gain);
 void process_mve(const uint16_t *src, const uint16_t *gain, uint16_t *dst, int n, int16_t offset);
 void planck_lut_mve(const uint16_t *src, uint16_t *dst, int n);
-static void XSPI_WriteEnable(XSPI_HandleTypeDef *hxspi);
-static void XSPI_AutoPollingMemReady(XSPI_HandleTypeDef *hxspi);
+//static void XSPI_WriteEnable(XSPI_HandleTypeDef *hxspi);
+//static void XSPI_AutoPollingMemReady(XSPI_HandleTypeDef *hxspi);
 static void XSPI_NOR_OctalDTRModeCfg(XSPI_HandleTypeDef *hxspi);
 
 /* USER CODE END PFP */
@@ -361,14 +362,13 @@ static inline void process_thermal_line_fastest(
     uint16_t * __restrict__ output,
     uint32_t width)
 {
-	uint16_t last_valid = 0;  // <-- Carry zwischen 8er-Blöcken
     for (uint32_t x = 0; x < width; x += 8)
     {
         // Load
         uint16x8_t adc = vld1q_u16(&sensor_data[x]);
         uint16x8_t dark_val = vld1q_u16(&dark[x]);
         uint16x8_t gain_val = vld1q_u16(&gain[x]);
-        uint16x8_t offset_val = vld1q_u16(&offset[x]);
+
 
         // Dark subtract
         uint16x8_t corrected = vqsubq_u16(adc, dark_val);
@@ -378,27 +378,6 @@ static inline void process_thermal_line_fastest(
         int16x8_t gain_s = vreinterpretq_s16_u16(gain_val);
         int16x8_t result_s = vqrdmulhq_s16(corrected_s, gain_s);
         uint16x8_t result = vreinterpretq_u16_s16(result_s);
-
-        uint16_t last_valid = 0;
-        // Add offset
-//        result = vqaddq_u16(result, offset_val);
-//        // -------- Primitive BPC (gain==0 -> vorheriges gültiges Pixel) --------
-//		// Lane-Operationen mit *konstanten* Indizes (keine Loop-Variable!)
-//		{
-//			uint16_t l = last_valid;
-//
-//			uint16_t g0 = vgetq_lane_u16(gain_val, 0); uint16_t r0 = vgetq_lane_u16(result, 0); if (g0 == 0) r0 = l; else l = r0; result = vsetq_lane_u16(r0, result, 0);
-//			uint16_t g1 = vgetq_lane_u16(gain_val, 1); uint16_t r1 = vgetq_lane_u16(result, 1); if (g1 == 0) r1 = l; else l = r1; result = vsetq_lane_u16(r1, result, 1);
-//			uint16_t g2 = vgetq_lane_u16(gain_val, 2); uint16_t r2 = vgetq_lane_u16(result, 2); if (g2 == 0) r2 = l; else l = r2; result = vsetq_lane_u16(r2, result, 2);
-//			uint16_t g3 = vgetq_lane_u16(gain_val, 3); uint16_t r3 = vgetq_lane_u16(result, 3); if (g3 == 0) r3 = l; else l = r3; result = vsetq_lane_u16(r3, result, 3);
-//			uint16_t g4 = vgetq_lane_u16(gain_val, 4); uint16_t r4 = vgetq_lane_u16(result, 4); if (g4 == 0) r4 = l; else l = r4; result = vsetq_lane_u16(r4, result, 4);
-//			uint16_t g5 = vgetq_lane_u16(gain_val, 5); uint16_t r5 = vgetq_lane_u16(result, 5); if (g5 == 0) r5 = l; else l = r5; result = vsetq_lane_u16(r5, result, 5);
-//			uint16_t g6 = vgetq_lane_u16(gain_val, 6); uint16_t r6 = vgetq_lane_u16(result, 6); if (g6 == 0) r6 = l; else l = r6; result = vsetq_lane_u16(r6, result, 6);
-//			uint16_t g7 = vgetq_lane_u16(gain_val, 7); uint16_t r7 = vgetq_lane_u16(result, 7); if (g7 == 0) r7 = l; else l = r7; result = vsetq_lane_u16(r7, result, 7);
-//
-//			last_valid = l;
-//		}
-		// ----------------------------------------------------------------------
 
         // Planck LUT
         result = vldrhq_gather_shifted_offset_u16(planck_lut, result);
@@ -419,7 +398,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	XSPI_RegularCmdTypeDef sCommand = {0};
   /* USER CODE END 1 */
 
   /* Enable the CPU Cache */
@@ -599,17 +577,14 @@ int main(void)
 
     uint32_t frame_count = 0;
     uint32_t last_perf_check = HAL_GetTick();
-
+    static uint8_t led_state = 0;
     while (1)
     {
       /* USER CODE END WHILE */
 
       /* USER CODE BEGIN 3 */
 
-      // ═══════════════════════════════════════════════════════════════════
-      // Main Processing Loop - 66 FPS
-      // ═══════════════════════════════════════════════════════════════════
-
+     LED1_SET();
       // Process all lines with fastest pipeline
       for (int line = 0; line < VPIX; line++) {
           process_thermal_line_fastest(
@@ -622,32 +597,22 @@ int main(void)
               HPIX
           );
       }
-
-      // Toggle LED @ 66 Hz (visible on oscilloscope!)
-      static uint8_t led_state = 0;
-      if (led_state) {
-          LED1_RESET();
-          led_state = 0;
-      } else {
-          LED1_SET();
-          led_state = 1;
-      }
-
-      frame_count++;
-
-      // Performance stats every 5 seconds
-      if (HAL_GetTick() - last_perf_check >= 5000) {
-          uint32_t fps = frame_count / 5;
-
-          printf("═══════════════════════════════════════════\n");
-          printf("  Frames processed: %lu\n", frame_count);
-          printf("  Average FPS: %lu\n", fps);
-          printf("  VSYNC count: %lu\n", vsync_count);
-          printf("═══════════════════════════════════════════\n");
-
-          frame_count = 0;
-          last_perf_check = HAL_GetTick();
-      }
+      LED1_RESET();
+//      frame_count++;
+//
+//      // Performance stats every 5 seconds
+//      if (HAL_GetTick() - last_perf_check >= 5000) {
+//          uint32_t fps = frame_count / 5;
+//
+//          printf("═══════════════════════════════════════════\n");
+//          printf("  Frames processed: %lu\n", frame_count);
+//          printf("  Average FPS: %lu\n", fps);
+//          printf("  VSYNC count: %lu\n", vsync_count);
+//          printf("═══════════════════════════════════════════\n");
+//
+//          frame_count = 0;
+//          last_perf_check = HAL_GetTick();
+//      }
 
     }
     /* USER CODE END 3 */
@@ -856,17 +821,25 @@ static void MX_XSPI2_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-  /* USER CODE BEGIN MX_GPIO_Init_1 */
-
-  /* USER CODE END MX_GPIO_Init_1 */
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+/* USER CODE BEGIN MX_GPIO_Init_1 */
+/* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOE_CLK_ENABLE();
-  __HAL_RCC_GPION_CLK_ENABLE();
+  __HAL_RCC_GPIOG_CLK_ENABLE();  // ✓ Correct for LED1 (PG8)
 
-  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET);
 
-  /* USER CODE END MX_GPIO_Init_2 */
+  /*Configure GPIO pin : LED1_Pin */
+  GPIO_InitStruct.Pin = LED1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  HAL_GPIO_Init(LED1_GPIO_Port, &GPIO_InitStruct);
+
+/* USER CODE BEGIN MX_GPIO_Init_2 */
+/* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -894,96 +867,96 @@ PUTCHAR_PROTOTYPE
 }
 #endif
 
-/* === XSPI helpers (protected) ============================================ */
-static void XSPI_WriteEnable(XSPI_HandleTypeDef *hxspi)
-{
-  XSPI_RegularCmdTypeDef  sCommand = {0};
-  XSPI_AutoPollingTypeDef sConfig  = {0};
+///* === XSPI helpers (protected) ============================================ */
+//static void XSPI_WriteEnable(XSPI_HandleTypeDef *hxspi)
+//{
+//  XSPI_RegularCmdTypeDef  sCommand = {0};
+//  XSPI_AutoPollingTypeDef sConfig  = {0};
+//
+//  /* Enable write operations ------------------------------------------ */
+//  sCommand.OperationType      = HAL_XSPI_OPTYPE_COMMON_CFG;
+//  sCommand.Instruction        = OCTAL_WRITE_ENABLE_CMD;
+//  sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
+//  sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_16_BITS;
+//  sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+//  sCommand.AddressMode        = HAL_XSPI_ADDRESS_NONE;
+//  sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
+//  sCommand.DataMode           = HAL_XSPI_DATA_NONE;
+//  sCommand.DummyCycles        = 0;
+//  sCommand.DQSMode            = HAL_XSPI_DQS_DISABLE;
+//
+//  if (HAL_XSPI_Command(hxspi, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//
+//  /* Configure automatic polling mode to wait for write enabling ---- */
+//  sCommand.Instruction        = OCTAL_READ_STATUS_REG_CMD;
+//  sCommand.Address            = 0x0;
+//  sCommand.AddressMode        = HAL_XSPI_ADDRESS_8_LINES;
+//  sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
+//  sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
+//  sCommand.DataMode           = HAL_XSPI_DATA_8_LINES;
+//  sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
+//  sCommand.DataLength         = 2;
+//  sCommand.DummyCycles        = DUMMY_CLOCK_CYCLES_READ_OCTAL;
+//  sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
+//
+//  if (HAL_XSPI_Command(hxspi, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//
+//  sConfig.MatchMode           = HAL_XSPI_MATCH_MODE_AND;
+//  sConfig.AutomaticStop       = HAL_XSPI_AUTOMATIC_STOP_ENABLE;
+//  sConfig.IntervalTime        = AUTO_POLLING_INTERVAL;
+//  sConfig.MatchMask           = WRITE_ENABLE_MASK_VALUE;
+//  sConfig.MatchValue          = WRITE_ENABLE_MATCH_VALUE;
+//
+//  if (HAL_XSPI_AutoPolling(hxspi, &sConfig, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//}
 
-  /* Enable write operations ------------------------------------------ */
-  sCommand.OperationType      = HAL_XSPI_OPTYPE_COMMON_CFG;
-  sCommand.Instruction        = OCTAL_WRITE_ENABLE_CMD;
-  sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
-  sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_16_BITS;
-  sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
-  sCommand.AddressMode        = HAL_XSPI_ADDRESS_NONE;
-  sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
-  sCommand.DataMode           = HAL_XSPI_DATA_NONE;
-  sCommand.DummyCycles        = 0;
-  sCommand.DQSMode            = HAL_XSPI_DQS_DISABLE;
-
-  if (HAL_XSPI_Command(hxspi, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /* Configure automatic polling mode to wait for write enabling ---- */
-  sCommand.Instruction        = OCTAL_READ_STATUS_REG_CMD;
-  sCommand.Address            = 0x0;
-  sCommand.AddressMode        = HAL_XSPI_ADDRESS_8_LINES;
-  sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
-  sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
-  sCommand.DataMode           = HAL_XSPI_DATA_8_LINES;
-  sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
-  sCommand.DataLength         = 2;
-  sCommand.DummyCycles        = DUMMY_CLOCK_CYCLES_READ_OCTAL;
-  sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
-
-  if (HAL_XSPI_Command(hxspi, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  sConfig.MatchMode           = HAL_XSPI_MATCH_MODE_AND;
-  sConfig.AutomaticStop       = HAL_XSPI_AUTOMATIC_STOP_ENABLE;
-  sConfig.IntervalTime        = AUTO_POLLING_INTERVAL;
-  sConfig.MatchMask           = WRITE_ENABLE_MASK_VALUE;
-  sConfig.MatchValue          = WRITE_ENABLE_MATCH_VALUE;
-
-  if (HAL_XSPI_AutoPolling(hxspi, &sConfig, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
-
-static void XSPI_AutoPollingMemReady(XSPI_HandleTypeDef *hxspi)
-{
-  XSPI_RegularCmdTypeDef  sCommand = {0};
-  XSPI_AutoPollingTypeDef sConfig  = {0};
-
-  /* Configure automatic polling mode to wait for memory ready ------ */
-  sCommand.OperationType      = HAL_XSPI_OPTYPE_COMMON_CFG;
-  sCommand.Instruction        = OCTAL_READ_STATUS_REG_CMD;
-  sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
-  sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_16_BITS;
-  sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
-  sCommand.Address            = 0x0;
-  sCommand.AddressMode        = HAL_XSPI_ADDRESS_8_LINES;
-  sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
-  sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
-  sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
-  sCommand.DataMode           = HAL_XSPI_DATA_8_LINES;
-  sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
-  sCommand.DataLength         = 2;
-  sCommand.DummyCycles        = DUMMY_CLOCK_CYCLES_READ_OCTAL;
-  sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
-
-  if (HAL_XSPI_Command(hxspi, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  sConfig.MatchMode           = HAL_XSPI_MATCH_MODE_AND;
-  sConfig.AutomaticStop       = HAL_XSPI_AUTOMATIC_STOP_ENABLE;
-  sConfig.IntervalTime        = AUTO_POLLING_INTERVAL;
-  sConfig.MatchMask           = MEMORY_READY_MASK_VALUE;
-  sConfig.MatchValue          = MEMORY_READY_MATCH_VALUE;
-
-  if (HAL_XSPI_AutoPolling(hxspi, &sConfig, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
+//static void XSPI_AutoPollingMemReady(XSPI_HandleTypeDef *hxspi)
+//{
+//  XSPI_RegularCmdTypeDef  sCommand = {0};
+//  XSPI_AutoPollingTypeDef sConfig  = {0};
+//
+//  /* Configure automatic polling mode to wait for memory ready ------ */
+//  sCommand.OperationType      = HAL_XSPI_OPTYPE_COMMON_CFG;
+//  sCommand.Instruction        = OCTAL_READ_STATUS_REG_CMD;
+//  sCommand.InstructionMode    = HAL_XSPI_INSTRUCTION_8_LINES;
+//  sCommand.InstructionWidth   = HAL_XSPI_INSTRUCTION_16_BITS;
+//  sCommand.InstructionDTRMode = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+//  sCommand.Address            = 0x0;
+//  sCommand.AddressMode        = HAL_XSPI_ADDRESS_8_LINES;
+//  sCommand.AddressWidth       = HAL_XSPI_ADDRESS_32_BITS;
+//  sCommand.AddressDTRMode     = HAL_XSPI_ADDRESS_DTR_ENABLE;
+//  sCommand.AlternateBytesMode = HAL_XSPI_ALT_BYTES_NONE;
+//  sCommand.DataMode           = HAL_XSPI_DATA_8_LINES;
+//  sCommand.DataDTRMode        = HAL_XSPI_DATA_DTR_ENABLE;
+//  sCommand.DataLength         = 2;
+//  sCommand.DummyCycles        = DUMMY_CLOCK_CYCLES_READ_OCTAL;
+//  sCommand.DQSMode            = HAL_XSPI_DQS_ENABLE;
+//
+//  if (HAL_XSPI_Command(hxspi, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//
+//  sConfig.MatchMode           = HAL_XSPI_MATCH_MODE_AND;
+//  sConfig.AutomaticStop       = HAL_XSPI_AUTOMATIC_STOP_ENABLE;
+//  sConfig.IntervalTime        = AUTO_POLLING_INTERVAL;
+//  sConfig.MatchMask           = MEMORY_READY_MASK_VALUE;
+//  sConfig.MatchValue          = MEMORY_READY_MATCH_VALUE;
+//
+//  if (HAL_XSPI_AutoPolling(hxspi, &sConfig, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//}
 
 /**
 * @brief  This function configure the memory in Octal DTR mode.
