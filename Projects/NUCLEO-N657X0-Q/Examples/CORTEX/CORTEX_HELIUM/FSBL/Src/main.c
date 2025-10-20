@@ -8,7 +8,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
+#include <math.h>
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "arm_mve.h"
@@ -32,6 +32,19 @@
 #define N (HPIX * VPIX)
 #define SENSOR_WIDTH  HPIX
 #define SENSOR_HEIGHT VPIX
+
+// Planck constants
+#define PLANCK_C1 1.191042e8f
+#define PLANCK_C2 1.4387752e4f
+
+// Temperature format
+#define TEMP_SCALE 100.0f
+#define TEMP_OFFSET 10000.0f
+
+// Sensor parameters (ADJUST!)
+#define SENSOR_WAVELENGTH 10.0f
+#define ADC_TO_RADIANCE_SCALE 1e-11f
+#define FLAG_TEMP_CELSIUS 25.0f
 
 // LED1 Definition
 #define LED1_Pin GPIO_PIN_8
@@ -165,6 +178,12 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_XSPI2_Init(void);
+void generate_planck_lut(uint16_t *planck_table, float wavelength_um,
+                         float radiance_scale, float flag_temp_c);
+float decode_temperature(uint16_t value);
+void init_planck_lut(void);
+
+
 /* USER CODE BEGIN PFP */
 
 static inline uint16_t gain_to_q15(float gain);
@@ -264,6 +283,297 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
 }
 /* USER CODE BEGIN 0 */
+// ═══════════════════════════════════════════════════════════════════
+// PLANCK LUT GENERATION - NO FLOAT PRINTF!
+// ═══════════════════════════════════════════════════════════════════
+
+void generate_planck_lut(
+    uint16_t *planck_table,
+    float wavelength_um,
+    float radiance_scale,
+    float flag_temp_c)
+{
+    printf("\n");
+    printf("╔═══════════════════════════════════════════════╗\n");
+    printf("║  Generating Planck LUT (0.01°C resolution)   ║\n");
+    printf("╚═══════════════════════════════════════════════╝\n");
+    printf("\n");
+
+    printf("Parameters:\n");
+
+    // Convert float to int for printing
+    int wavelength_int = (int)wavelength_um;
+    printf("  • Wavelength:     %d μm\n", wavelength_int);
+
+    int flag_temp_int = (int)flag_temp_c;
+    printf("  • Flag temp:      %d°C\n", flag_temp_int);
+
+    // Radiance scale as fixed-point (×1000000)
+    int radiance_int = (int)(radiance_scale * 1000000.0f);
+    printf("  • Radiance scale: %d (×1e-6)\n", radiance_int);
+
+    printf("  • Resolution:     0.01°C\n");
+    printf("  • Output format:  (T × 100) + 10000\n");
+    printf("\n");
+
+    const float lambda = wavelength_um;
+    const float lambda5 = powf(lambda, 5.0f);
+    const float lambda_c2 = lambda * PLANCK_C2;
+
+    uint32_t valid_count = 0;
+    uint32_t saturated_count = 0;
+    uint32_t zero_count = 0;
+
+    printf("Generating 65536 entries...\n");
+
+    for (uint32_t adc = 0; adc < 65536; adc++) {
+        float radiance = (float)adc * radiance_scale;
+
+        if (radiance <= 0.0f) {
+            planck_table[adc] = 0;
+            zero_count++;
+            continue;
+        }
+
+        float ratio = PLANCK_C1 / (radiance * lambda5);
+
+        if (ratio < 1e-6f) {
+            planck_table[adc] = 65535;
+            saturated_count++;
+            continue;
+        }
+
+        float temp_kelvin = lambda_c2 / logf(ratio + 1.0f);
+        float temp_celsius = temp_kelvin - 273.15f;
+        float temp_relative = temp_celsius - flag_temp_c;
+        int32_t temp_output = (int32_t)((temp_relative * TEMP_SCALE) + TEMP_OFFSET);
+
+        if (temp_output < 0) {
+            planck_table[adc] = 0;
+            zero_count++;
+        } else if (temp_output > 65535) {
+            planck_table[adc] = 65535;
+            saturated_count++;
+        } else {
+            planck_table[adc] = (uint16_t)temp_output;
+            valid_count++;
+        }
+    }
+
+    printf("✓ LUT generation complete!\n\n");
+
+    printf("Statistics:\n");
+
+    // Calculate percentage as integer (×10 for one decimal)
+    uint32_t valid_pct = (valid_count * 1000) / 65536;  // ×10 for 1 decimal
+    uint32_t zero_pct = (zero_count * 1000) / 65536;
+    uint32_t sat_pct = (saturated_count * 1000) / 65536;
+
+    printf("  • Valid entries:     %5lu (%lu.%lu%%)\n",
+           valid_count, valid_pct / 10, valid_pct % 10);
+    printf("  • Zero entries:      %5lu (%lu.%lu%%)\n",
+           zero_count, zero_pct / 10, zero_pct % 10);
+    printf("  • Saturated entries: %5lu (%lu.%lu%%)\n",
+           saturated_count, sat_pct / 10, sat_pct % 10);
+    printf("\n");
+
+    printf("Sample LUT Values:\n");
+    printf("  ADC      -> Output   -> Temperature\n");
+    printf("  ────────────────────────────────────\n");
+
+    uint32_t samples[] = {100, 1000, 5000, 10000, 20000, 30000, 40000, 50000};
+    for (int i = 0; i < 8; i++) {
+        uint32_t adc = samples[i];
+        if (adc < 65536) {
+            uint16_t output = planck_table[adc];
+
+            // Decode temperature as integer (centidegrees)
+            int32_t temp_centi = (int32_t)output - 10000;  // Can be negative!
+            int32_t temp_abs = (temp_centi < 0) ? -temp_centi : temp_centi;
+            char sign = (temp_centi < 0) ? '-' : '+';
+
+            // Split into integer and fractional parts
+            uint32_t temp_int = temp_abs / 100;
+            uint32_t temp_frac = temp_abs % 100;
+
+            printf("  %-8lu -> %-7u -> %c%lu.%02lu°C\n",
+                   adc, output, sign, temp_int, temp_frac);
+        }
+    }
+
+    printf("\n");
+    printf("╔═══════════════════════════════════════════════╗\n");
+    printf("║  Planck LUT Ready in DTCM!                    ║\n");
+    printf("╚═══════════════════════════════════════════════╝\n");
+    printf("\n");
+}
+
+/**
+ * @brief Decode temperature - Integer version (no float printf needed!)
+ * @param value: LUT output value
+ * @param temp_int: Output integer part (degrees)
+ * @param temp_frac: Output fractional part (0-99 centidegrees)
+ * @param is_negative: Output sign flag
+ */
+void decode_temperature_int(uint16_t value,
+                           uint32_t *temp_int,
+                           uint32_t *temp_frac,
+                           uint8_t *is_negative)
+{
+    int32_t temp_centi = (int32_t)value - 10000;
+
+    *is_negative = (temp_centi < 0) ? 1 : 0;
+
+    int32_t temp_abs = (*is_negative) ? -temp_centi : temp_centi;
+
+    *temp_int = temp_abs / 100;
+    *temp_frac = temp_abs % 100;
+}
+
+float decode_temperature(uint16_t value) {
+    return ((float)value - TEMP_OFFSET) / TEMP_SCALE;
+}
+
+float calculate_radiance_scale(
+    uint16_t adc_min,
+    uint16_t adc_max,
+    float temp_min,
+    float temp_max)
+{
+    const float lambda = SENSOR_WAVELENGTH;
+    const float lambda5 = powf(lambda, 5.0f);
+
+    // Convert temperatures to Kelvin
+    float T_min = temp_min + 273.15f;
+    float T_max = temp_max + 273.15f;
+
+    // Calculate expected radiance using Planck's law
+    // R = C1 / (λ⁵ × (exp(C2/(λ×T)) - 1))
+    float exp_min = expf(PLANCK_C2 / (lambda * T_min));
+    float exp_max = expf(PLANCK_C2 / (lambda * T_max));
+
+    float R_min = PLANCK_C1 / (lambda5 * (exp_min - 1.0f));
+    float R_max = PLANCK_C1 / (lambda5 * (exp_max - 1.0f));
+
+    // Calculate scale factor
+    // ADC = Radiance / scale
+    // → scale = Radiance / ADC
+    float scale = (R_max - R_min) / (float)(adc_max - adc_min);
+
+    return scale;
+}
+
+
+/* USER CODE BEGIN 0 */
+
+// ... (existing Planck code) ...
+
+// ═══════════════════════════════════════════════════════════════════
+// LINEAR TEMPERATURE LUT (SIMPLIFIED - WORKING!)
+// ═══════════════════════════════════════════════════════════════════
+
+void generate_linear_temp_lut(
+    uint16_t *planck_table,
+    float temp_min_c,
+    float temp_max_c,
+    float flag_temp_c)
+{
+    printf("\n");
+    printf("╔═══════════════════════════════════════════════╗\n");
+    printf("║  Generating LINEAR Temperature LUT            ║\n");
+    printf("╚═══════════════════════════════════════════════╝\n");
+    printf("\n");
+
+    int temp_min_int = (int)temp_min_c;
+    int temp_max_int = (int)temp_max_c;
+    int flag_temp_int = (int)flag_temp_c;
+
+    printf("Parameters:\n");
+    printf("  • Min temp:      %d°C\n", temp_min_int);
+    printf("  • Max temp:      %d°C\n", temp_max_int);
+    printf("  • Flag temp:     %d°C\n", flag_temp_int);
+    printf("  • Resolution:    0.01°C\n");
+    printf("  • Output format: (T × 100) + 10000\n");
+    printf("\n");
+
+    printf("Generating 65536 entries...\n");
+
+    for (uint32_t adc = 0; adc < 65536; adc++) {
+        float temp_celsius = temp_min_c + ((float)adc / 65535.0f) * (temp_max_c - temp_min_c);
+        float temp_relative = temp_celsius - flag_temp_c;
+        int32_t temp_output = (int32_t)((temp_relative * TEMP_SCALE) + TEMP_OFFSET);
+
+        if (temp_output < 0) temp_output = 0;
+        if (temp_output > 65535) temp_output = 65535;
+
+        planck_table[adc] = (uint16_t)temp_output;
+    }
+
+    printf("✓ Linear LUT generated!\n\n");
+
+    printf("Sample LUT Values:\n");
+    printf("  ADC      -> Output   -> Temperature\n");
+    printf("  ────────────────────────────────────\n");
+
+    uint32_t samples[] = {0, 8192, 16384, 32768, 49152, 57344, 65535};
+    for (int i = 0; i < 7; i++) {
+        uint32_t adc = samples[i];
+        uint16_t output = planck_table[adc];
+
+        int32_t temp_centi = (int32_t)output - 10000;
+        int32_t temp_abs = (temp_centi < 0) ? -temp_centi : temp_centi;
+        char sign = (temp_centi < 0) ? '-' : '+';
+        uint32_t temp_int = temp_abs / 100;
+        uint32_t temp_frac = temp_abs % 100;
+
+        printf("  %-8lu -> %-7u -> %c%lu.%02lu°C\n",
+               adc, output, sign, temp_int, temp_frac);
+    }
+
+    printf("\n");
+    printf("╔═══════════════════════════════════════════════╗\n");
+    printf("║  Linear LUT Ready in DTCM!                   ║\n");
+    printf("╚═══════════════════════════════════════════════╝\n");
+    printf("\n");
+}
+
+
+// Usage in init:
+void init_planck_lut(void) {
+/*    // Define expected scene temperature range
+    const uint16_t ADC_AT_MIN_TEMP = 324;   // ADC value at min temp
+    const uint16_t ADC_AT_MAX_TEMP = 4754;  // ADC value at max temp
+    const float MIN_SCENE_TEMP = 40.0f;       // Minimum scene temp (°C)
+    const float MAX_SCENE_TEMP = 100.0f;     // Maximum scene temp (°C)
+
+    // Calculate calibrated scale
+    float radiance_scale = calculate_radiance_scale(
+        ADC_AT_MIN_TEMP,
+        ADC_AT_MAX_TEMP,
+        MIN_SCENE_TEMP,
+        MAX_SCENE_TEMP
+    );
+
+    printf("Calculated radiance scale: ");
+    int scale_exp = (int)log10f(radiance_scale);
+    int scale_mant = (int)(radiance_scale / powf(10.0f, (float)scale_exp) * 1000.0f);
+    printf("%d.%03d e%d\n", scale_mant / 1000, scale_mant % 1000, scale_exp);
+
+    // Generate LUT with calibrated scale
+    generate_planck_lut(
+        planck_table,
+        SENSOR_WAVELENGTH,
+        radiance_scale,
+        FLAG_TEMP_CELSIUS
+    );*/
+    generate_linear_temp_lut(
+        planck_table,
+        -20.0f,     // Min expected scene temp (°C)
+        150.0f,     // Max expected scene temp (°C)
+        FLAG_TEMP_CELSIUS
+    );
+}
+
 
 /* USER CODE END 0 */
 static inline uint16_t gain_to_q15(float gain)
@@ -440,6 +750,9 @@ int main(void)
     printf("║  Production Code - 66 FPS Pipeline            ║\n");
     printf("╚════════════════════════════════════════════════╝\n");
     printf("\n");
+
+
+    init_planck_lut();
 
     // ────────────────────────────────────────────────────────────────────
     // Initialize XSPI Memory-Mapped Mode
