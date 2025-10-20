@@ -242,15 +242,15 @@ void thermal_frame_process(void) {
     // Placeholder - will be filled later
     frames_processed++;
 
-    // Toggle LED to show activity
-    static uint8_t led_state = 0;
-    if (led_state) {
-        LED1_RESET();
-        led_state = 0;
-    } else {
-        LED1_SET();
-        led_state = 1;
-    }
+//    // Toggle LED to show activity
+//    static uint8_t led_state = 0;
+//    if (led_state) {
+//        LED1_RESET();
+//        led_state = 0;
+//    } else {
+//        LED1_SET();
+//        led_state = 1;
+//    }
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -575,16 +575,18 @@ int main(void)
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
 
-    uint32_t frame_count = 0;
-    uint32_t last_perf_check = HAL_GetTick();
+    //uint32_t frame_count = 0;
+    //uint32_t last_perf_check = HAL_GetTick();
     static uint8_t led_state = 0;
+    static int count = 0;
     while (1)
     {
       /* USER CODE END WHILE */
 
       /* USER CODE BEGIN 3 */
 
-     LED1_SET();
+      DWT->CYCCNT = 0;
+      //LED1_SET();
       // Process all lines with fastest pipeline
       for (int line = 0; line < VPIX; line++) {
           process_thermal_line_fastest(
@@ -597,23 +599,21 @@ int main(void)
               HPIX
           );
       }
-      LED1_RESET();
-//      frame_count++;
-//
-//      // Performance stats every 5 seconds
-//      if (HAL_GetTick() - last_perf_check >= 5000) {
-//          uint32_t fps = frame_count / 5;
-//
-//          printf("═══════════════════════════════════════════\n");
-//          printf("  Frames processed: %lu\n", frame_count);
-//          printf("  Average FPS: %lu\n", fps);
-//          printf("  VSYNC count: %lu\n", vsync_count);
-//          printf("═══════════════════════════════════════════\n");
-//
-//          frame_count = 0;
-//          last_perf_check = HAL_GetTick();
-//      }
+      //LED1_RESET();
 
+      uint32_t cycles = DWT->CYCCNT;
+      if (++count >= 100) {
+          printf("Frame time: %lu cycles (%lu ms)\n",
+                 cycles, cycles / 600000);
+          count = 0;
+          if(led_state) {
+			  LED1_RESET();
+			  led_state = 0;
+		  } else {
+			  LED1_SET();
+			  led_state = 1;
+		  }
+      }
     }
     /* USER CODE END 3 */
   /* USER CODE END 3 */
