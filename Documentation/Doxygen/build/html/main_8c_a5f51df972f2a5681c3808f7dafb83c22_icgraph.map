@@ -1,0 +1,5 @@
+<map id="process_calibration_frame" name="process_calibration_frame">
+<area shape="rect" id="Node000001" title="Process one frame during calibration (call from main loop or ISR)." alt="" coords="103,5,236,48"/>
+<area shape="rect" id="Node000002" href="$main_8c.html#a840291bc02cba5474a4cb46a9b9566fe" title="Hauptprogramm&#45;Einstiegspunkt." alt="" coords="5,13,55,40"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="87,29,55,29,55,24,87,24"/>
+</map>

@@ -1,0 +1,17 @@
+<map id="BSP_XSPI_NOR_Init" name="BSP_XSPI_NOR_Init">
+<area shape="rect" id="Node000001" title="Initializes the XSPI interface." alt="" coords="5,132,154,159"/>
+<area shape="rect" id="Node000002" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#gaa6d40510e8570fda0b07fbe258890414" title="Set Flash to desired Interface mode. And this instance becomes current instance. If current instance ..." alt="" coords="202,56,402,83"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="110,129,201,92,225,85,227,90,203,97,112,134"/>
+<area shape="rect" id="Node000006" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#gabd50a1c84f55a305c169a7dba2e6e87b" title="Initializes the XSPI interface." alt="" coords="231,107,372,133"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="154,134,215,127,216,132,154,140"/>
+<area shape="rect" id="Node000007" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___private___functions.html#gad2124a6b677d50eca815068c1a12005a" title="Initializes the XSPI MSP." alt="" coords="232,157,372,184"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="154,151,217,158,217,164,154,156"/>
+<area shape="rect" id="Node000008" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___private___functions.html#ga2079d91f22628240bc0bab452ec92078" title="This function reset the XSPI memory." alt="" coords="213,208,391,235"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="112,157,203,193,227,201,225,206,201,199,110,162"/>
+<area shape="rect" id="Node000003" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___private___functions.html#ga6c2174b3588e28db4a2f34bb26582603" title="This function enables the octal DTR mode of the memory." alt="" coords="450,5,642,32"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="369,53,463,33,464,38,370,58"/>
+<area shape="rect" id="Node000004" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___private___functions.html#ga4d2f380862fd1667eca4d8cabd7681ec" title="This function enables the octal STR mode of the memory." alt="" coords="450,56,642,83"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="403,67,435,67,435,72,403,72"/>
+<area shape="rect" id="Node000005" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___private___functions.html#ga71270f202f993c42c59c9d419ac20bf9" title="This function disables the octal DTR or STR mode of the memory." alt="" coords="459,107,633,133"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="370,81,464,100,463,106,369,86"/>
+</map>

@@ -1,0 +1,21 @@
+name: Doxygen
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+jobs:
+  build-doxygen:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install doxygen & graphviz
+        run: choco install doxygen.portable graphviz -y
+      - name: Build docs
+        run: |
+          cd Documentation\Doxygen
+          doxygen Doxyfile
+      - name: Upload HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: doxygen-html
+          path: Documentation/Doxygen/docs/build/html

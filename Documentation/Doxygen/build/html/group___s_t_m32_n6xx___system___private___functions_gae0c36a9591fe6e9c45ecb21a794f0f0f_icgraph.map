@@ -1,0 +1,5 @@
+<map id="SystemCoreClockUpdate" name="SystemCoreClockUpdate">
+<area shape="rect" id="Node000001" title="Update SystemCoreClock variable according to Clock Register Values. The SystemCoreClock variable cont..." alt="" coords="288,5,458,32"/>
+<area shape="rect" id="Node000002" href="$group___s_t_m32_n6xx___system___private___functions.html#ga4aa3ec24b1be863a8d53bc1960317505" title="Secure Non&#45;Secure&#45;Callable function to return the current SystemCoreClock value after SystemCoreClock..." alt="" coords="5,5,240,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="272,21,240,21,240,16,272,16"/>
+</map>

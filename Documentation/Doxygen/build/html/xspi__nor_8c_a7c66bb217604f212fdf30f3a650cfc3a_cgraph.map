@@ -1,0 +1,5 @@
+<map id="XSPI_NOR_EraseSector" name="XSPI_NOR_EraseSector">
+<area shape="rect" id="Node000001" title="Erase a sector (64KB) of XSPI NOR Flash." alt="" coords="5,13,174,40"/>
+<area shape="rect" id="Node000002" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#ga1c45f7467f5ea94e9e6a0222535876be" title="Erases the specified block of the XSPI memory." alt="" coords="222,5,386,48"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="174,24,206,24,206,29,174,29"/>
+</map>

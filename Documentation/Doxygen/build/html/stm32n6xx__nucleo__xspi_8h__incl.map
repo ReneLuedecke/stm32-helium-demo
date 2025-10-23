@@ -1,0 +1,11 @@
+<map id="stm32n6xx_nucleo_xspi.h" name="stm32n6xx_nucleo_xspi.h">
+<area shape="rect" id="Node000001" title="This file contains the common defines and functions prototypes for the stm32n6xx_nucleo_xspi...." alt="" coords="206,5,378,32"/>
+<area shape="rect" id="Node000002" href="$stm32n6xx__nucleo__conf_8h.html" title="STM32N6XX nucleo board configuration file." alt="" coords="5,88,179,115"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="262,35,138,84,136,79,260,30"/>
+<area shape="rect" id="Node000004" href="$stm32n6xx__nucleo__errno_8h.html" title="Error code definitions." alt="" coords="203,88,381,115"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="295,32,295,73,289,73,289,32"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="405,80,608,123"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="326,30,438,72,436,77,325,35"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="32,171,152,197"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="95,115,95,155,89,155,89,115"/>
+</map>

@@ -1,0 +1,5 @@
+<map id="BSP_XSPI_NOR_Read" name="BSP_XSPI_NOR_Read">
+<area shape="rect" id="Node000001" title="Reads an amount of data from the XSPI memory." alt="" coords="181,5,342,32"/>
+<area shape="rect" id="Node000002" href="$xspi__nor_8c.html#ad070727e2eee1dcbda29c26b4a6746b4" title="Read data from XSPI NOR Flash." alt="" coords="5,5,133,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="165,21,133,21,133,16,165,16"/>
+</map>

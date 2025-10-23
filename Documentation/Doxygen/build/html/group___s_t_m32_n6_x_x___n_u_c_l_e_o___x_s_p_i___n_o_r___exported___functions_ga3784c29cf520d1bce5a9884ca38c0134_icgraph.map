@@ -1,0 +1,5 @@
+<map id="BSP_XSPI_NOR_Write" name="BSP_XSPI_NOR_Write">
+<area shape="rect" id="Node000001" title="Writes an amount of data to the XSPI memory." alt="" coords="180,5,340,32"/>
+<area shape="rect" id="Node000002" href="$xspi__nor_8c.html#aee70d78828452a0e272037deac80d487" title="Write data to XSPI NOR Flash." alt="" coords="5,5,132,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="164,21,132,21,132,16,164,16"/>
+</map>

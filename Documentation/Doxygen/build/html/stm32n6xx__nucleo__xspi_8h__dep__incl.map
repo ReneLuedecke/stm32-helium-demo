@@ -1,0 +1,12 @@
+<map id="stm32n6xx_nucleo_xspi.h" name="stm32n6xx_nucleo_xspi.h">
+<area shape="rect" id="Node000001" title="This file contains the common defines and functions prototypes for the stm32n6xx_nucleo_xspi...." alt="" coords="22,5,194,32"/>
+<area shape="rect" id="Node000002" href="$main_8c.html" title="Entry&#45;Point und Initialisierung für STM32N6 NUCLEO&#45;Projekt." alt="" coords="45,155,105,181"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="58,41,32,58,12,81,8,91,9,101,19,120,36,138,55,152,52,156,32,142,14,123,4,102,3,90,7,79,28,54,55,37"/>
+<area shape="rect" id="Node000003" href="$stm32n6xx__nucleo__xspi_8c.html" title=" " alt="" coords="22,80,194,107"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="111,48,111,80,106,80,106,48"/>
+<area shape="rect" id="Node000004" href="$xspi__nor_8h.html" title=" " alt="" coords="218,80,300,107"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="149,37,234,77,231,82,147,41"/>
+<area shape="poly" id="edge4_Node000004_Node000002" title=" " alt="" coords="214,115,106,157,104,152,212,110"/>
+<area shape="rect" id="Node000005" href="$xspi__nor_8c.html" title=" " alt="" coords="218,155,300,181"/>
+<area shape="poly" id="edge5_Node000004_Node000005" title=" " alt="" coords="262,122,262,154,256,154,256,122"/>
+</map>

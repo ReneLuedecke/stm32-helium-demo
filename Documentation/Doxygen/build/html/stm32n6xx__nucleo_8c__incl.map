@@ -1,0 +1,11 @@
+<map id="stm32n6xx_nucleo.c" name="stm32n6xx_nucleo.c">
+<area shape="rect" id="Node000001" title="This file provides a set of firmware functions to manage: LEDs push&#45;buttons COM ports available on ST..." alt="" coords="121,5,263,32"/>
+<area shape="rect" id="Node000002" href="$stm32n6xx__nucleo_8h.html" title="This file contains definitions for STM32N6XX&#45;Nucleo Kit: LEDs push&#45;buttons COM ports hardware resourc..." alt="" coords="121,80,263,107"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="195,33,195,64,189,64,189,33"/>
+<area shape="rect" id="Node000003" href="$stm32n6xx__nucleo__conf_8h.html" title="STM32N6XX nucleo board configuration file." alt="" coords="5,155,179,181"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="176,109,123,147,120,143,173,105"/>
+<area shape="rect" id="Node000005" href="$stm32n6xx__nucleo__errno_8h.html" title="Error code definitions." alt="" coords="203,155,381,181"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="211,105,264,143,261,147,208,109"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="32,229,152,256"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="95,182,95,214,89,214,89,182"/>
+</map>

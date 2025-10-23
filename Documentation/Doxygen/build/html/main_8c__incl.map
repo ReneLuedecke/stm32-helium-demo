@@ -1,0 +1,33 @@
+<map id="main.c" name="main.c">
+<area shape="rect" id="Node000001" title="Entry&#45;Point und Initialisierung für STM32N6 NUCLEO&#45;Projekt." alt="" coords="287,5,347,32"/>
+<area shape="rect" id="Node000002" href="$main_8h.html" title=": Header for main.c file. This file contains the common defines of the application." alt="" coords="79,155,139,181"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="287,24,219,29,137,39,60,56,32,68,14,82,9,91,9,99,19,117,40,133,66,147,64,152,37,138,15,120,3,101,4,89,10,78,30,63,59,51,136,34,219,23,287,19"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="24,80,85,107"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="287,31,101,82,99,77,286,26"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="109,80,195,107"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="290,35,196,76,194,71,287,30"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="219,80,279,107"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="307,34,273,70,269,67,304,31"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="285,155,349,181"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="320,33,320,139,315,139,315,33"/>
+<area shape="rect" id="Node000008" title=" " alt="" coords="354,80,419,107"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="331,31,366,67,362,70,327,34"/>
+<area shape="rect" id="Node000009" href="$xspi__nor_8h.html" title=" " alt="" coords="443,80,525,107"/>
+<area shape="poly" id="edge8_Node000001_Node000009" title=" " alt="" coords="347,30,442,71,440,76,345,35"/>
+<area shape="rect" id="Node000010" href="$stm32n6xx__nucleo__xspi_8h.html" title="This file contains the common defines and functions prototypes for the stm32n6xx_nucleo_xspi...." alt="" coords="476,155,649,181"/>
+<area shape="poly" id="edge16_Node000001_Node000010" title=" " alt="" coords="348,17,390,19,441,28,494,47,518,61,539,78,550,92,557,107,564,139,559,140,552,109,545,94,535,82,515,65,491,52,440,34,390,25,348,22"/>
+<area shape="rect" id="Node000014" title=" " alt="" coords="600,80,725,107"/>
+<area shape="poly" id="edge17_Node000001_Node000014" title=" " alt="" coords="348,24,588,74,587,79,347,29"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="326,320,447,347"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="132,180,353,309,351,314,129,184"/>
+<area shape="poly" id="edge9_Node000009_Node000003" title=" " alt="" coords="478,109,448,160,414,230,402,269,394,306,389,304,397,268,409,228,443,158,474,106"/>
+<area shape="poly" id="edge15_Node000009_Node000007" title=" " alt="" coords="456,110,361,151,359,146,454,105"/>
+<area shape="poly" id="edge10_Node000009_Node000010" title=" " alt="" coords="499,105,540,142,536,146,496,109"/>
+<area shape="rect" id="Node000011" href="$stm32n6xx__nucleo__conf_8h.html" title="STM32N6XX nucleo board configuration file." alt="" coords="424,237,597,264"/>
+<area shape="poly" id="edge11_Node000010_Node000011" title=" " alt="" coords="557,183,529,226,525,223,552,180"/>
+<area shape="rect" id="Node000012" href="$stm32n6xx__nucleo__errno_8h.html" title="Error code definitions." alt="" coords="622,237,799,264"/>
+<area shape="poly" id="edge13_Node000010_Node000012" title=" " alt="" coords="587,179,675,227,673,232,584,184"/>
+<area shape="rect" id="Node000013" title=" " alt="" coords="824,229,1027,272"/>
+<area shape="poly" id="edge14_Node000010_Node000013" title=" " alt="" coords="620,179,818,223,816,228,619,185"/>
+<area shape="poly" id="edge12_Node000011_Node000003" title=" " alt="" coords="493,267,420,314,417,309,490,262"/>
+</map>

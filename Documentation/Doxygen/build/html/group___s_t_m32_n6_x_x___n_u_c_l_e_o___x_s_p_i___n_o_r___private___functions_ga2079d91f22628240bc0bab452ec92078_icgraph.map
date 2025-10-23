@@ -1,0 +1,7 @@
+<map id="XSPI_NOR_ResetMemory" name="XSPI_NOR_ResetMemory">
+<area shape="rect" id="Node000001" title="This function reset the XSPI memory." alt="" coords="386,5,564,32"/>
+<area shape="rect" id="Node000002" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#ga1d85a26b27f6fc0610894c158845cff0" title="Initializes the XSPI interface." alt="" coords="190,5,338,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="370,21,338,21,338,16,370,16"/>
+<area shape="rect" id="Node000003" href="$xspi__nor_8c.html#aecd84e9f4d3be12e230d05cb6aba364c" title="Initialize XSPI2 NOR Flash in Octal DTR Mode." alt="" coords="5,5,142,32"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="174,21,142,21,142,16,174,16"/>
+</map>

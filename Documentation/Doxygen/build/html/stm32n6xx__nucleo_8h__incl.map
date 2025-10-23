@@ -1,0 +1,9 @@
+<map id="stm32n6xx_nucleo.h" name="stm32n6xx_nucleo.h">
+<area shape="rect" id="Node000001" title="This file contains definitions for STM32N6XX&#45;Nucleo Kit: LEDs push&#45;buttons COM ports hardware resourc..." alt="" coords="121,5,263,32"/>
+<area shape="rect" id="Node000002" href="$stm32n6xx__nucleo__conf_8h.html" title="STM32N6XX nucleo board configuration file." alt="" coords="5,80,179,107"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="176,35,123,73,120,68,173,30"/>
+<area shape="rect" id="Node000004" href="$stm32n6xx__nucleo__errno_8h.html" title="Error code definitions." alt="" coords="203,80,381,107"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="211,30,264,68,261,73,208,35"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="32,155,152,181"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="95,107,95,139,89,139,89,107"/>
+</map>

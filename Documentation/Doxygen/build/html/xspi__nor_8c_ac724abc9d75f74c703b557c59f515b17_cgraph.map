@@ -1,0 +1,5 @@
+<map id="XSPI_NOR_GetStatus" name="XSPI_NOR_GetStatus">
+<area shape="rect" id="Node000001" title="Get flash status." alt="" coords="5,5,161,32"/>
+<area shape="rect" id="Node000002" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#ga2abd3e72b32bf47b19bf86486dc85b30" title="Reads current status of the XSPI memory." alt="" coords="209,5,398,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="161,16,193,16,193,21,161,21"/>
+</map>

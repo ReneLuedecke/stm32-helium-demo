@@ -1,0 +1,20 @@
+<map id="xspi_nor.c" name="xspi_nor.c">
+<area shape="rect" id="Node000001" title=" " alt="" coords="234,5,316,32"/>
+<area shape="rect" id="Node000002" href="$xspi__nor_8h.html" title=" " alt="" coords="188,80,269,107"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="269,34,247,68,242,66,264,31"/>
+<area shape="rect" id="Node000009" title=" " alt="" coords="293,80,353,107"/>
+<area shape="poly" id="edge9_Node000001_Node000009" title=" " alt="" coords="285,31,308,66,304,69,281,34"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="5,320,126,347"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="191,110,151,127,105,153,63,187,46,208,32,230,27,249,30,269,48,306,43,308,25,271,22,249,27,228,42,205,60,184,102,149,148,123,189,105"/>
+<area shape="rect" id="Node000004" href="$stm32n6xx__nucleo__xspi_8h.html" title="This file contains the common defines and functions prototypes for the stm32n6xx_nucleo_xspi...." alt="" coords="142,155,314,181"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="231,107,231,139,226,139,226,107"/>
+<area shape="rect" id="Node000008" title=" " alt="" coords="339,155,403,181"/>
+<area shape="poly" id="edge8_Node000002_Node000008" title=" " alt="" coords="254,105,333,145,331,150,252,110"/>
+<area shape="rect" id="Node000005" href="$stm32n6xx__nucleo__conf_8h.html" title="STM32N6XX nucleo board configuration file." alt="" coords="42,237,215,264"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="214,184,157,230,153,226,211,180"/>
+<area shape="rect" id="Node000006" href="$stm32n6xx__nucleo__errno_8h.html" title="Error code definitions." alt="" coords="240,237,417,264"/>
+<area shape="poly" id="edge6_Node000004_Node000006" title=" " alt="" coords="245,180,303,226,300,230,242,184"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="441,229,644,272"/>
+<area shape="poly" id="edge7_Node000004_Node000007" title=" " alt="" coords="278,179,448,222,446,228,277,185"/>
+<area shape="poly" id="edge5_Node000005_Node000003" title=" " alt="" coords="120,266,86,310,82,306,116,263"/>
+</map>

@@ -1,0 +1,5 @@
+<map id="process_thermal_line_fastest" name="process_thermal_line_fastest">
+<area shape="rect" id="Node000001" title="Verarbeitet eine Zeile der Thermal&#45;Daten (Helium&#45;optimiert)." alt="" coords="103,5,247,48"/>
+<area shape="rect" id="Node000002" href="$main_8c.html#a840291bc02cba5474a4cb46a9b9566fe" title="Hauptprogramm&#45;Einstiegspunkt." alt="" coords="5,13,55,40"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="87,29,55,29,55,24,87,24"/>
+</map>

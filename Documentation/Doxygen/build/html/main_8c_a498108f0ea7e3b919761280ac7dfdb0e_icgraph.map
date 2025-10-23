@@ -1,0 +1,7 @@
+<map id="generate_linear_temp_lut" name="generate_linear_temp_lut">
+<area shape="rect" id="Node000001" title="Generiert eine lineare Temperatur&#45;LUT." alt="" coords="255,5,421,32"/>
+<area shape="rect" id="Node000002" href="$main_8c.html#a871eca9b13486157307efb50271ab52a" title=" " alt="" coords="103,5,207,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="239,21,207,21,207,16,239,16"/>
+<area shape="rect" id="Node000003" href="$main_8c.html#a840291bc02cba5474a4cb46a9b9566fe" title="Hauptprogramm&#45;Einstiegspunkt." alt="" coords="5,5,55,32"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="87,21,55,21,55,16,87,16"/>
+</map>

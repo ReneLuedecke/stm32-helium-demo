@@ -1,0 +1,9 @@
+<map id="BSP_XSPI_NOR_ConfigFlash" name="BSP_XSPI_NOR_ConfigFlash">
+<area shape="rect" id="Node000001" title="Set Flash to desired Interface mode. And this instance becomes current instance. If current instance ..." alt="" coords="5,56,206,83"/>
+<area shape="rect" id="Node000002" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___private___functions.html#ga6c2174b3588e28db4a2f34bb26582603" title="This function enables the octal DTR mode of the memory." alt="" coords="254,5,446,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="173,53,267,33,268,38,174,58"/>
+<area shape="rect" id="Node000003" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___private___functions.html#ga4d2f380862fd1667eca4d8cabd7681ec" title="This function enables the octal STR mode of the memory." alt="" coords="254,56,446,83"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="206,67,239,67,239,72,206,72"/>
+<area shape="rect" id="Node000004" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___private___functions.html#ga71270f202f993c42c59c9d419ac20bf9" title="This function disables the octal DTR or STR mode of the memory." alt="" coords="263,107,437,133"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="174,81,268,100,267,106,173,86"/>
+</map>

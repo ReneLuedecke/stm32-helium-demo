@@ -1,0 +1,5 @@
+<map id="BSP_XSPI_NOR_EnableMemoryMappedMode" name="BSP_XSPI_NOR_EnableMemoryMappedMode">
+<area shape="rect" id="Node000001" title="Configure the XSPI in memory&#45;mapped mode." alt="" coords="315,5,532,48"/>
+<area shape="rect" id="Node000002" href="$xspi__nor_8c.html#a8c8c4a3e14969e2338c01ffc10ea911c" title="Enable memory&#45;mapped mode." alt="" coords="5,13,267,40"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="299,29,267,29,267,24,299,24"/>
+</map>

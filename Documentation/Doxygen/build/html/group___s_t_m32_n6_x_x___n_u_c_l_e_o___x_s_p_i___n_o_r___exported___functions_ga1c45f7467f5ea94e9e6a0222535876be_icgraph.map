@@ -1,0 +1,5 @@
+<map id="BSP_XSPI_NOR_Erase_Block" name="BSP_XSPI_NOR_Erase_Block">
+<area shape="rect" id="Node000001" title="Erases the specified block of the XSPI memory." alt="" coords="222,5,386,48"/>
+<area shape="rect" id="Node000002" href="$xspi__nor_8c.html#a7c66bb217604f212fdf30f3a650cfc3a" title="Erase a sector (64KB) of XSPI NOR Flash." alt="" coords="5,13,174,40"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="206,29,174,29,174,24,206,24"/>
+</map>

@@ -1,0 +1,11 @@
+<map id="XSPI_NOR_EnterDOPIMode" name="XSPI_NOR_EnterDOPIMode">
+<area shape="rect" id="Node000001" title="This function enables the octal DTR mode of the memory." alt="" coords="652,31,845,57"/>
+<area shape="rect" id="Node000002" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#gaa6d40510e8570fda0b07fbe258890414" title="Set Flash to desired Interface mode. And this instance becomes current instance. If current instance ..." alt="" coords="404,31,604,57"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="637,47,605,47,605,41,637,41"/>
+<area shape="rect" id="Node000003" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#ga1d85a26b27f6fc0610894c158845cff0" title="Initializes the XSPI interface." alt="" coords="199,5,347,32"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="388,34,347,29,348,24,389,29"/>
+<area shape="rect" id="Node000005" href="$xspi__nor_8c.html#a4e20ac71236d17401ff623d0ad01c73f" title="Configure flash interface mode." alt="" coords="190,56,356,83"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="389,59,357,63,356,58,389,54"/>
+<area shape="rect" id="Node000004" href="$xspi__nor_8c.html#aecd84e9f4d3be12e230d05cb6aba364c" title="Initialize XSPI2 NOR Flash in Octal DTR Mode." alt="" coords="5,5,142,32"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="183,21,142,21,142,16,183,16"/>
+</map>

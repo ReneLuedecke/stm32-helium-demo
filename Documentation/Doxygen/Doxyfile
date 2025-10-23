@@ -1,0 +1,62 @@
+# ============================================================================
+#  Doxygen-Konfiguration für STM32N6 – CORTEX_HELIUM (FSBL)
+#  Standort: D:\Code\STM32\RLU_Expriemente\stm32-helium-demo\Documentation\Doxygen
+#  Aufruf:   doxygen Doxyfile
+# ============================================================================
+
+PROJECT_NAME           = "STM32N6 – CORTEX_HELIUM FSBL"
+PROJECT_BRIEF          = "Optris Firmware – Thermal Pipeline (NUCLEO-N657X0-Q)"
+
+# Output: im lokalen Doku-Ordner (wird bei Bedarf angelegt)
+OUTPUT_DIRECTORY       = build
+CREATE_SUBDIRS         = NO
+
+# ---------------------------------------------------------------------------
+# Eingabequellen (RELATIV zu Documentation\Doxygen)
+# ---------------------------------------------------------------------------
+#  ..\..\  -> zurück zum Repo-Root
+#  dann ins FSBL-Projekt
+INPUT                  = ..\..\Projects\NUCLEO-N657X0-Q\Examples\CORTEX\CORTEX_HELIUM\FSBL\Src \
+                         ..\..\Projects\NUCLEO-N657X0-Q\Examples\CORTEX\CORTEX_HELIUM\FSBL\Inc \
+                         docs.h \
+                         Handover.md
+FILE_PATTERNS          = *.c *.h *.md
+RECURSIVE              = YES
+# Bereits generierte HTML-Ausgaben (falls vorhanden) ignorieren:
+EXCLUDE_PATTERNS       = */_htmresc/* */html/* */build/*
+
+# ---------------------------------------------------------------------------
+# Ausgabe
+# ---------------------------------------------------------------------------
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_TREEVIEW      = YES
+FULL_PATH_NAMES        = NO
+
+# ---------------------------------------------------------------------------
+# Diagramme / Graphviz
+# ---------------------------------------------------------------------------
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+DOT_TRANSPARENT        = YES
+DOT_GRAPH_MAX_NODES    = 80
+
+# ---------------------------------------------------------------------------
+# Dokumentationsextraktion
+# ---------------------------------------------------------------------------
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_LOCAL_METHODS  = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_NO_PARAMDOC       = YES
+
+# ---------------------------------------------------------------------------
+# Mainpage (Markdown) und kein LaTeX/PDF
+# ---------------------------------------------------------------------------
+USE_MDFILE_AS_MAINPAGE = Handover.md
+GENERATE_LATEX         = NO
+
+

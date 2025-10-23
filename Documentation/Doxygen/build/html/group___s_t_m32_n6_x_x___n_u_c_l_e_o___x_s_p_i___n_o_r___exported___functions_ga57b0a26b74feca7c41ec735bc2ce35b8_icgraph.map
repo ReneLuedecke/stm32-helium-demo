@@ -1,0 +1,7 @@
+<map id="BSP_XSPI_NOR_DisableMemoryMappedMode" name="BSP_XSPI_NOR_DisableMemoryMappedMode">
+<area shape="rect" id="Node000001" title="Exit form memory&#45;mapped mode Only 1 Instance can running MMP mode. And it will lock system at this mo..." alt="" coords="319,23,540,65"/>
+<area shape="rect" id="Node000002" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#gabce328b8be2a1a489c20ef1a9ad8a19b" title="De&#45;Initializes the XSPI interface." alt="" coords="55,5,221,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="303,36,221,29,221,23,303,30"/>
+<area shape="rect" id="Node000003" href="$xspi__nor_8c.html#a284c52cc338232f44f8a4297dacd5bb0" title="Disable memory&#45;mapped mode." alt="" coords="5,56,271,83"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="303,58,271,60,271,55,303,52"/>
+</map>

@@ -1,0 +1,113 @@
+/* ========= Optris Doxygen Theme (light) ========= */
+:root {
+  --optris-primary: #0b5fa5;    /* Primärblau – bei Bedarf anpassen */
+  --optris-primary-800: #094c83;
+  --optris-primary-50: #e6f0f8;
+  --text: #1a1a1a;
+  --muted: #5a5a5a;
+  --bg: #ffffff;
+  --code-bg: #f6f8fa;
+  --border: #e5e7eb;
+}
+
+/* Grundlayout & Typo */
+html, body, .contents, .header, .headertitle, .title {
+  font-family: "Segoe UI", Roboto, Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+h1, h2, h3 {
+  color: var(--optris-primary-800);
+  letter-spacing: .2px;
+}
+a { color: var(--optris-primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Header/Nav */
+div#titlearea, .header {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.navpath {
+  background: var(--optris-primary);
+  color: #fff;
+}
+.navpath a { color: #fff; }
+.navpath li.navelem::after { color: rgba(255,255,255,.7); }
+
+/* Menü / Baum */
+#nav-sync {
+  filter: hue-rotate(0deg) saturate(0%);
+}
+.sm-dox {
+  --menu-bg: #ffffff;
+  --menu-border: var(--border);
+  --menu-hover: var(--optris-primary-50);
+}
+div#side-nav, .ui-resizable-e {
+  background: #fff;
+  border-right: 1px solid var(--border);
+}
+#nav-tree .selected a {
+  background: var(--optris-primary-50);
+  border-left: 3px solid var(--optris-primary);
+  color: var(--optris-primary-800);
+}
+
+/* Inhaltsbereich */
+.contents, .textblock {
+  line-height: 1.6;
+}
+.fragment, pre, code {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+table.doxtable, .memberdecls {
+  border-color: var(--border);
+}
+.doxtable th {
+  background: var(--optris-primary-50);
+  color: var(--optris-primary-800);
+}
+
+/* Suchbox */
+#MSearchBox .left, #MSearchBox .right, #MSearchBox input {
+  border-color: var(--border);
+}
+#MSearchField {
+  border-radius: 6px;
+}
+
+/* Footer */
+.footer {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* Badge/Farben für Gruppen/Seitentitel */
+div.header .title {
+  padding: .2rem 0;
+}
+.page-title, .groupheader .title {
+  border-bottom: 2px solid var(--optris-primary);
+  padding-bottom: .25rem;
+}
+
+/* Links im Inhaltsverzeichnis */
+.contents a.el {
+  color: var(--optris-primary);
+}
+
+/* Optional: dunkles Logo auf hellem Header (siehe Abschnitt 2) */
+#optris-logo {
+  height: 28px;
+  vertical-align: middle;
+  margin-right: .5rem;
+}
+
+/* Kleine Responsive-Verbesserungen */
+@media (max-width: 1100px) {
+  .headertitle { padding: 0 8px; }
+  #MSearchBox { max-width: 240px; }
+}

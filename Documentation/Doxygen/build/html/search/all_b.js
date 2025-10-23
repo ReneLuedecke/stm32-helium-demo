@@ -1,0 +1,20 @@
+var searchData=
+[
+  ['main_0',['main',['../main_8c.html#a840291bc02cba5474a4cb46a9b9566fe',1,'main.c']]],
+  ['main_2ec_1',['main.c',['../main_8c.html',1,'']]],
+  ['main_2eh_2',['main.h',['../main_8h.html',1,'']]],
+  ['max_5fbad_5fpixels_3',['MAX_BAD_PIXELS',['../main_8c.html#a724007862833feaf397f02be4c7fe5e2',1,'main.c']]],
+  ['memmanage_5fhandler_4',['MemManage_Handler',['../stm32n6xx__it_8c.html#a3150f74512510287a942624aa9b44cc5',1,'MemManage_Handler(void):&#160;stm32n6xx_it.c'],['../stm32n6xx__it_8h.html#a3150f74512510287a942624aa9b44cc5',1,'MemManage_Handler(void):&#160;stm32n6xx_it.c']]],
+  ['memory_5fpage_5fprog_5fdelay_5',['MEMORY_PAGE_PROG_DELAY',['../main_8h.html#a3c2f89c9d4ae94afdf20f6b55267a4cf',1,'main.h']]],
+  ['memory_5fready_5fmask_5fvalue_6',['MEMORY_READY_MASK_VALUE',['../main_8h.html#a68a2d01509eaf33de893d63b862b1439',1,'main.h']]],
+  ['memory_5fready_5fmatch_5fvalue_7',['MEMORY_READY_MATCH_VALUE',['../main_8h.html#a4c92e6333d35a7c39325a00ffe9b1cdd',1,'main.h']]],
+  ['memory_5freg_5fwrite_5fdelay_8',['MEMORY_REG_WRITE_DELAY',['../main_8h.html#a14b3311a6cd5b9af4af0fa8648f87cbb',1,'main.h']]],
+  ['memorysize_9',['MemorySize',['../struct_m_x___x_s_p_i___init_type_def.html#a30a2fc48c5748094770e62e69c2afef3',1,'MX_XSPI_InitTypeDef']]],
+  ['msi_5fvalue_10',['MSI_VALUE',['../group___s_t_m32_n6xx___system___private___defines.html#ga90e2a73d7fe4a7425c6e31fef5ce7263',1,'MSI_VALUE:&#160;system_stm32n6xx_fsbl.c'],['../stm32n6xx__hal__conf_8h.html#a90e2a73d7fe4a7425c6e31fef5ce7263',1,'MSI_VALUE:&#160;stm32n6xx_hal_conf.h']]],
+  ['mve_5fcopy_5fu16_11',['mve_copy_u16',['../main_8c.html#a5ef95b887f9b5c697a938bb0a058787b',1,'main.c']]],
+  ['mx_5fgpio_5finit_12',['MX_GPIO_Init',['../main_8c.html#ae89fdd15729ad41a66911190fcbab23a',1,'main.c']]],
+  ['mx_5fusart1_5fuart_5finit_13',['MX_USART1_UART_Init',['../main_8c.html#a62f4b77e20bccafe98a183771749c20c',1,'main.c']]],
+  ['mx_5fxspi2_5finit_14',['MX_XSPI2_Init',['../main_8c.html#a60261eba3fc793ee811755a2287e7630',1,'main.c']]],
+  ['mx_5fxspi_5finittypedef_15',['MX_XSPI_InitTypeDef',['../struct_m_x___x_s_p_i___init_type_def.html',1,'']]],
+  ['mx_5fxspi_5fnor_5finit_16',['MX_XSPI_NOR_Init',['../group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#gabd50a1c84f55a305c169a7dba2e6e87b',1,'stm32n6xx_nucleo_xspi.c']]]
+];

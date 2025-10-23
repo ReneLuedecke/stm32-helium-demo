@@ -1,0 +1,7 @@
+<map id="system_stm32n6xx_fsbl.c" name="system_stm32n6xx_fsbl.c">
+<area shape="rect" id="Node000001" title="CMSIS Cortex&#45;M55 Device Peripheral Access Layer System Source File to be used after the boot ROM exec..." alt="" coords="17,5,191,32"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="5,80,102,107"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="98,34,73,69,69,66,93,31"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="126,80,187,107"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="115,31,141,66,136,69,111,34"/>
+</map>

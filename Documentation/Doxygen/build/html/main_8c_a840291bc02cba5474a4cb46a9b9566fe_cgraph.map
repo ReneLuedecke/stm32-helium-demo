@@ -1,0 +1,53 @@
+<map id="main" name="main">
+<area shape="rect" id="Node000001" title="Hauptprogramm&#45;Einstiegspunkt." alt="" coords="5,503,55,529"/>
+<area shape="rect" id="Node000002" href="$main_8c.html#a109c9136dd8ff3e1bb95c9f2ab5de884" title="Korrigiert fehlerhafte Pixel (einfache Variante)." alt="" coords="142,5,272,48"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="29,502,32,414,43,281,52,212,64,148,80,95,101,58,126,39,129,44,105,62,85,97,69,149,57,213,48,282,38,414,34,503"/>
+<area shape="rect" id="Node000003" href="$main_8c.html#af4b7e8a72db498ee767f48bca7fcfcf3" title=" " alt="" coords="125,72,289,99"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="29,502,34,422,45,304,54,243,66,187,82,141,101,109,110,101,113,105,105,112,86,143,71,188,59,244,50,305,39,422,34,502"/>
+<area shape="rect" id="Node000004" href="$main_8c.html#a1730ffe1e560465665eb47d9264826f9" title="This function is executed in case of error occurrence." alt="" coords="392,864,493,891"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="34,530,38,608,48,721,57,779,70,832,85,874,104,901,138,921,175,933,215,937,256,935,334,918,398,895,399,900,335,923,256,940,215,942,174,938,136,926,101,905,80,876,64,833,52,780,43,722,32,608,29,530"/>
+<area shape="rect" id="Node000005" href="$main_8c.html#abbb9cd5d6c8b13356d801322b2b3a5df" title=" " alt="" coords="161,173,252,200"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="30,502,37,440,51,352,72,267,85,233,101,210,121,196,145,188,147,193,124,200,105,214,90,236,77,268,57,353,43,440,35,502"/>
+<area shape="rect" id="Node000006" href="$main_8c.html#a7f78882baee3fc59805caf946080e87a" title=" " alt="" coords="152,224,262,251"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="28,502,29,456,38,391,47,356,60,321,77,289,101,261,117,249,136,241,138,246,120,254,104,265,82,292,64,324,52,358,43,392,34,456,33,502"/>
+<area shape="rect" id="Node000007" href="$main_8c.html#a871eca9b13486157307efb50271ab52a" title=" " alt="" coords="155,123,259,149"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="30,502,35,431,48,328,69,227,83,187,101,160,118,146,138,138,140,143,121,151,105,163,88,189,74,228,53,329,41,432,35,503"/>
+<area shape="rect" id="Node000009" href="$main_8c.html#ac02210515137b859e7acf747efc220e2" title="Prüft, ob eine Kalibrierung aktiv ist." alt="" coords="158,325,256,352"/>
+<area shape="poly" id="edge8_Node000001_Node000009" title=" " alt="" coords="31,502,38,472,51,435,72,395,101,362,120,350,142,342,144,347,123,355,104,366,76,398,56,437,43,474,36,503"/>
+<area shape="rect" id="Node000010" href="$main_8c.html#a7c547974e57013d24e39911f53aaf9c5" title=" " alt="" coords="137,275,276,301"/>
+<area shape="poly" id="edge9_Node000001_Node000010" title=" " alt="" coords="29,502,33,464,44,413,65,358,81,333,101,311,121,298,124,303,104,315,85,336,70,361,49,414,38,465,35,503"/>
+<area shape="rect" id="Node000012" href="$main_8c.html#ae89fdd15729ad41a66911190fcbab23a" title="Initialisiert GPIOs (LEDs, Debugpins)." alt="" coords="154,427,260,453"/>
+<area shape="poly" id="edge11_Node000001_Node000012" title=" " alt="" coords="46,500,71,481,102,463,138,450,140,455,104,468,74,485,49,504"/>
+<area shape="rect" id="Node000013" href="$main_8c.html#a62f4b77e20bccafe98a183771749c20c" title="USART1 Initialization Function." alt="" coords="123,376,291,403"/>
+<area shape="poly" id="edge12_Node000001_Node000013" title=" " alt="" coords="35,501,59,457,78,433,101,413,109,407,112,412,104,417,82,437,64,460,39,503"/>
+<area shape="rect" id="Node000014" href="$main_8c.html#a60261eba3fc793ee811755a2287e7630" title="Initialisiert XSPI2 (Octal DTR MemoryMapped Mode)." alt="" coords="151,477,262,504"/>
+<area shape="poly" id="edge14_Node000001_Node000014" title=" " alt="" coords="55,510,135,498,136,503,56,515"/>
+<area shape="rect" id="Node000015" href="$main_8c.html#a5f51df972f2a5681c3808f7dafb83c22" title="Process one frame during calibration (call from main loop or ISR)." alt="" coords="140,579,274,621"/>
+<area shape="poly" id="edge16_Node000001_Node000015" title=" " alt="" coords="49,527,74,546,104,564,127,574,124,579,101,569,71,551,46,532"/>
+<area shape="rect" id="Node000016" href="$main_8c.html#ac8362fb9670f98716b80330485d25d27" title="Verarbeitet eine Zeile der Thermal&#45;Daten (Helium&#45;optimiert)." alt="" coords="135,645,279,688"/>
+<area shape="poly" id="edge17_Node000001_Node000016" title=" " alt="" coords="38,529,62,579,81,607,104,631,122,642,119,647,101,635,76,610,57,581,34,531"/>
+<area shape="rect" id="Node000017" href="$main_8c.html#aa95571e88c26de98a53961bd13c73754" title=" " alt="" coords="153,712,260,739"/>
+<area shape="poly" id="edge18_Node000001_Node000017" title=" " alt="" coords="35,530,40,564,52,610,72,658,87,679,104,698,121,709,139,716,137,721,118,713,101,702,83,683,68,660,47,611,35,565,30,530"/>
+<area shape="rect" id="Node000018" href="$main_8c.html#aa0daaee8ed015f1164a725642a50d00d" title=" " alt="" coords="137,763,277,789"/>
+<area shape="poly" id="edge19_Node000001_Node000018" title=" " alt="" coords="34,529,36,572,45,631,54,663,66,695,83,724,104,749,124,762,121,766,101,753,79,727,62,697,49,665,40,632,31,573,28,530"/>
+<area shape="rect" id="Node000019" href="$main_8c.html#a6d3e848fcd8ec8fde52a81c73703efa4" title="Startet eine neue Dunkelbild&#45;Kalibrierung." alt="" coords="114,813,300,840"/>
+<area shape="poly" id="edge20_Node000001_Node000019" title=" " alt="" coords="36,529,43,588,58,669,78,749,91,779,105,800,108,802,104,806,101,803,86,782,73,750,53,671,38,589,30,530"/>
+<area shape="rect" id="Node000020" href="$main_8c.html#a70af21c671abfcc773614a9a4f63d920" title="Initialisiert den Systemtakt (PLL, Busse, IC&#45;Domain)." alt="" coords="134,528,280,555"/>
+<area shape="poly" id="edge21_Node000001_Node000020" title=" " alt="" coords="56,517,119,526,119,531,55,522"/>
+<area shape="rect" id="Node000021" href="$main_8c.html#a146935b63d2990b0f6569670f1bd1688" title=" " alt="" coords="142,864,272,891"/>
+<area shape="poly" id="edge23_Node000001_Node000021" title=" " alt="" coords="35,529,41,597,55,694,75,789,89,826,105,850,128,866,125,870,101,854,84,828,70,790,49,695,36,598,30,530"/>
+<area shape="rect" id="Node000022" href="$main_8c.html#ac7bc33868f36b01a0e1129391f38f8c0" title=" " alt="" coords="137,965,276,992"/>
+<area shape="poly" id="edge25_Node000001_Node000022" title=" " alt="" coords="34,530,38,614,50,738,59,803,71,863,86,912,105,945,125,961,122,965,101,948,81,914,66,864,53,804,44,739,33,614,29,530"/>
+<area shape="rect" id="Node000023" href="$main_8c.html#a95e55441d0d167805773df306e629006" title="This function configure the memory in Octal DTR mode." alt="" coords="103,1016,311,1043"/>
+<area shape="poly" id="edge27_Node000001_Node000023" title=" " alt="" coords="34,530,36,624,45,766,54,841,66,909,83,965,105,1002,107,1004,103,1008,101,1006,78,967,61,910,49,841,40,767,31,624,29,530"/>
+<area shape="rect" id="Node000008" href="$main_8c.html#a498108f0ea7e3b919761280ac7dfdb0e" title="Generiert eine lineare Temperatur&#45;LUT." alt="" coords="359,123,525,149"/>
+<area shape="poly" id="edge7_Node000007_Node000008" title=" " alt="" coords="259,133,343,133,343,139,259,139"/>
+<area shape="rect" id="Node000011" href="$main_8c.html#a6821f0d3d62201280c453b50bbcb9ea2" title=" " alt="" coords="360,275,524,301"/>
+<area shape="poly" id="edge10_Node000010_Node000011" title=" " alt="" coords="277,285,345,285,345,291,277,291"/>
+<area shape="poly" id="edge13_Node000013_Node000004" title=" " alt="" coords="293,399,313,413,355,463,387,521,410,583,427,646,437,707,442,764,445,849,439,849,437,764,432,708,421,647,405,585,382,523,350,466,309,417,290,404"/>
+<area shape="poly" id="edge15_Node000014_Node000004" title=" " alt="" coords="264,492,290,500,313,514,347,552,375,595,397,642,413,690,434,780,442,848,437,849,429,781,408,691,392,644,370,598,343,555,309,518,287,504,262,497"/>
+<area shape="poly" id="edge22_Node000020_Node000004" title=" " alt="" coords="281,547,313,565,343,596,369,632,390,672,406,712,429,789,440,848,435,849,424,790,401,714,385,674,364,635,339,600,309,569,279,552"/>
+<area shape="poly" id="edge24_Node000021_Node000004" title=" " alt="" coords="272,875,376,875,376,880,272,880"/>
+<area shape="poly" id="edge26_Node000022_Node000004" title=" " alt="" coords="259,962,310,944,404,897,406,901,312,949,260,967"/>
+<area shape="poly" id="edge28_Node000023_Node000004" title=" " alt="" coords="284,1013,310,1002,343,979,373,953,420,901,423,905,377,957,346,984,312,1006,286,1018"/>
+</map>

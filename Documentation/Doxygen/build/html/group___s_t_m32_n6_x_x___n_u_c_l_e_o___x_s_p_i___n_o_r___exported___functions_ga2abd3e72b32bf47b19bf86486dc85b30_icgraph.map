@@ -1,0 +1,9 @@
+<map id="BSP_XSPI_NOR_GetStatus" name="BSP_XSPI_NOR_GetStatus">
+<area shape="rect" id="Node000001" title="Reads current status of the XSPI memory." alt="" coords="269,56,458,83"/>
+<area shape="rect" id="Node000002" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#gabfb147a26495cef93282654d3e0aa34e" title="This function resumes a paused erase command." alt="" coords="6,5,220,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="278,55,182,35,183,30,279,50"/>
+<area shape="rect" id="Node000003" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___x_s_p_i___n_o_r___exported___functions.html#ga326085d390cfe04ac6d8e117c3ec7be5" title="This function suspends an ongoing erase command." alt="" coords="5,56,221,83"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="253,72,221,72,221,67,253,67"/>
+<area shape="rect" id="Node000004" href="$xspi__nor_8c.html#ac724abc9d75f74c703b557c59f515b17" title="Get flash status." alt="" coords="35,107,191,133"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="279,89,183,109,182,103,278,84"/>
+</map>

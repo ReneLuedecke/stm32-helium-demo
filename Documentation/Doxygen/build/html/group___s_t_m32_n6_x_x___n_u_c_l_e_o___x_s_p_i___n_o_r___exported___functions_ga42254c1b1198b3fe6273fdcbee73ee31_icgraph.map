@@ -1,0 +1,5 @@
+<map id="BSP_XSPI_NOR_GetInfo" name="BSP_XSPI_NOR_GetInfo">
+<area shape="rect" id="Node000001" title="Return the configuration of the XSPI memory." alt="" coords="193,5,366,32"/>
+<area shape="rect" id="Node000002" href="$xspi__nor_8c.html#a28d7af55cf32b8df6cc09cb642c9d595" title="Get flash information." alt="" coords="5,5,145,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="177,21,145,21,145,16,177,16"/>
+</map>

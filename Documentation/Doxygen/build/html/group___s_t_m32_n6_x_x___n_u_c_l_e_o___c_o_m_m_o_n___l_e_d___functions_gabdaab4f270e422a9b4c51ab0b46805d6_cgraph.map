@@ -1,0 +1,5 @@
+<map id="BSP_LED_Init" name="BSP_LED_Init">
+<area shape="rect" id="Node000001" title="Configure LED GPIO." alt="" coords="5,5,112,32"/>
+<area shape="rect" id="Node000002" href="$group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d___functions.html#gaea34e7387bd59481a5995f6dc99dfcfe" title="Turn selected LED Off." alt="" coords="160,5,265,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="112,16,144,16,144,21,112,21"/>
+</map>

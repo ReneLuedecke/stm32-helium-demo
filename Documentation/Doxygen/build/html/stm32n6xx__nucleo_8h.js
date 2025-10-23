@@ -1,0 +1,66 @@
+var stm32n6xx__nucleo_8h =
+[
+    [ "BUTTON_PRESSED", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n.html#ga666f4a9872b7185170dd9318ceff91c6", null ],
+    [ "BUTTON_RELEASED", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n.html#gafd02c108ba5abc6ddc9b17b6a3348880", null ],
+    [ "BUTTON_USER_EXTI_IRQn", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n.html#ga2fafe0484fbd724d53cb19a0a8209bae", null ],
+    [ "BUTTON_USER_EXTI_LINE", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n.html#gad822b72b53b80f1c39944eccda48d2f7", null ],
+    [ "BUTTON_USER_GPIO_CLK_ENABLE", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n.html#gaa129a45d811ad624874ff4e44128d3dc", null ],
+    [ "BUTTON_USER_GPIO_PORT", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n.html#ga52262bfb62708a13743ca74920a36cc4", null ],
+    [ "BUTTON_USER_PIN", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n.html#ga99a4a9cea219b21a98ce8ebd78679adf", null ],
+    [ "LED1_GPIO_CLK_ENABLE", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d.html#gae90d969ab305110513ff3c2c0874f2e7", null ],
+    [ "LED1_GPIO_PORT", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d.html#ga5d97443b4011e40e47164445dc1adde0", null ],
+    [ "LED1_PIN", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d.html#ga318aa17e5d40e2132d2c7f6269ce7f51", null ],
+    [ "LED2_GPIO_CLK_ENABLE", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d.html#ga810e6c23b9a3e66da601b0058ec7a245", null ],
+    [ "LED2_GPIO_PORT", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d.html#gaf88822ae4b79d37c7735ce1160b59f68", null ],
+    [ "LED2_PIN", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d.html#gaf6f84078113b55354d20585131b386f7", null ],
+    [ "LED3_GPIO_CLK_ENABLE", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d.html#gaac6c1162fc6bf1b60265e6fb7622e306", null ],
+    [ "LED3_GPIO_PORT", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d.html#ga050f4b3a1f402476f9541dfe975d2143", null ],
+    [ "LED3_PIN", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d.html#ga4cb3ff938bcabb01494ce529ae55a542", null ],
+    [ "SMPS_GPIO_CLK_ENABLE", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#ga5ef7683e8a958e9f60a902a0660f5d79", null ],
+    [ "SMPS_GPIO_PIN", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#gabfb4a0bdee724eaddecf0f0e077a7cdc", null ],
+    [ "SMPS_GPIO_PORT", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#gab7418fae10e419dfd6d6245b76aadd1d", null ],
+    [ "STM32N6XX_NUCLEO_BSP_BOARD_ID", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#ga4b437457fbc7e3594e9e72e0d8af7797", null ],
+    [ "STM32N6XX_NUCLEO_BSP_BOARD_NAME", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#gaf715bbbec9ff35c07fbd11e09c4781c7", null ],
+    [ "STM32N6xx_NUCLEO_BSP_VERSION", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#ga34505a90f58b3a4193cb72f028964939", null ],
+    [ "STM32N6xx_NUCLEO_BSP_VERSION_MAIN", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#gae7b925a9ce12cbd36f5f9384a99db5bc", null ],
+    [ "STM32N6xx_NUCLEO_BSP_VERSION_RC", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#gabe19f01565ae662c0e73cd540aada93e", null ],
+    [ "STM32N6xx_NUCLEO_BSP_VERSION_SUB1", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#ga9a372eef7b54a488d97266d201474893", null ],
+    [ "STM32N6xx_NUCLEO_BSP_VERSION_SUB2", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#gacc9d965cc39e827ddd77a38daecb9778", null ],
+    [ "USE_STM32N6xx_NUCLEO", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___constants.html#ga096fdbd9816ead3e84fccd2ddc72a1ca", null ],
+    [ "Button_TypeDef", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#ga643816dfbad5c734fc25a29ce8d35bb1", [
+      [ "BUTTON_USER", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#gga643816dfbad5c734fc25a29ce8d35bb1a6454f3dfd31c55a877e1b6684451d076", null ],
+      [ "BUTTONn", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#gga643816dfbad5c734fc25a29ce8d35bb1a939e4b741a834f81958e609e688e591e", null ]
+    ] ],
+    [ "ButtonMode_TypeDef", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#ga48825b7c7d851c440ef8e808fd9d8f0a", [
+      [ "BUTTON_MODE_GPIO", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#gga48825b7c7d851c440ef8e808fd9d8f0aa9411f3542831027b24c493abfb998522", null ],
+      [ "BUTTON_MODE_EXTI", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#gga48825b7c7d851c440ef8e808fd9d8f0aa13c1ad97bc3db33d7f2b5a7c116bc8f5", null ]
+    ] ],
+    [ "Led_TypeDef", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#gaa059704b7ca945eb9c1e7f2c3d03fecd", [
+      [ "LED1", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#ggaa059704b7ca945eb9c1e7f2c3d03fecdadac6477842247cab1a8c02c65f431b44", null ],
+      [ "LED_BLUE", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#ggaa059704b7ca945eb9c1e7f2c3d03fecdaa67c57c0ff22a2772cb6a5751a3327bf", null ],
+      [ "LED2", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#ggaa059704b7ca945eb9c1e7f2c3d03fecda8379bbaa96d151e6adac488b2a147b7a", null ],
+      [ "LED_RED", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#ggaa059704b7ca945eb9c1e7f2c3d03fecdad80f13022b6d309268fadc7b1da89cb9", null ],
+      [ "LED3", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#ggaa059704b7ca945eb9c1e7f2c3d03fecda5dec293e081e0fc78369c842fab8452b", null ],
+      [ "LED_GREEN", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#ggaa059704b7ca945eb9c1e7f2c3d03fecda0ad916c7f80666dc88f6b5b22a72e742", null ],
+      [ "LEDn", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#ggaa059704b7ca945eb9c1e7f2c3d03fecda253fbf43a2438c7b4ecea158ae6e28e6", null ]
+    ] ],
+    [ "SMPSVoltage_TypeDef", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#ga1fc35a7f792188c151f2ed02e0207316", [
+      [ "SMPS_VOLTAGE_NOMINAL", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#gga1fc35a7f792188c151f2ed02e0207316ae3b823effa671d735d1836ac9b13bf0a", null ],
+      [ "SMPS_VOLTAGE_OVERDRIVE", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___types.html#gga1fc35a7f792188c151f2ed02e0207316a3592a362e9ffc78322600f35adc3e3bb", null ]
+    ] ],
+    [ "BSP_GetBoardID", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___functions.html#ga5ef0093c45c3e939e0ca03e1a12486c9", null ],
+    [ "BSP_GetBoardName", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___functions.html#ga3dac20c420416482a03706b0233e279d", null ],
+    [ "BSP_GetVersion", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___functions.html#gac791c242a2365c81b3e2c3da94fc8bc2", null ],
+    [ "BSP_LED_DeInit", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d___functions.html#ga6e75d0d61e97bab0a93f0d9735c38a82", null ],
+    [ "BSP_LED_GetState", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d___functions.html#ga621cb57dc226c380bc12bc24300675e7", null ],
+    [ "BSP_LED_Init", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d___functions.html#gabdaab4f270e422a9b4c51ab0b46805d6", null ],
+    [ "BSP_LED_Off", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d___functions.html#gaea34e7387bd59481a5995f6dc99dfcfe", null ],
+    [ "BSP_LED_On", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d___functions.html#ga3e213ea9b2686f5c20d81e9137b5a0d0", null ],
+    [ "BSP_LED_Toggle", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___l_e_d___functions.html#ga9cfb0f9b27e11a3efce50bcc045e8938", null ],
+    [ "BSP_PB_Callback", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n___functions.html#ga6b81100f595935ad2744a6b09a3e52e1", null ],
+    [ "BSP_PB_DeInit", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n___functions.html#gaf682838f957fe4c9c2299342f404f78e", null ],
+    [ "BSP_PB_GetState", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n___functions.html#ga2a873fc1a9478adb9f92027cf3f31f00", null ],
+    [ "BSP_PB_Init", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n___functions.html#ga36ae7750be3904a4eac9465368fb8c95", null ],
+    [ "BSP_PB_IRQHandler", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___b_u_t_t_o_n___functions.html#gafc9200e75ead474a8953b027735787e9", null ],
+    [ "BSP_SMPS_Init", "group___s_t_m32_n6_x_x___n_u_c_l_e_o___c_o_m_m_o_n___exported___functions.html#ga9826ed8775cd4a49d115eb96dcf5de3d", null ]
+];

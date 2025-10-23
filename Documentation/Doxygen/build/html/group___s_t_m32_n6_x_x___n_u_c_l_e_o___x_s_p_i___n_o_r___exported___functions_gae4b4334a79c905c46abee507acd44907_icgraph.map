@@ -1,0 +1,5 @@
+<map id="BSP_XSPI_NOR_Erase_Chip" name="BSP_XSPI_NOR_Erase_Chip">
+<area shape="rect" id="Node000001" title="Erases the entire XSPI memory." alt="" coords="211,5,409,32"/>
+<area shape="rect" id="Node000002" href="$xspi__nor_8c.html#a2f11f557c61bfef1491b5531475f936b" title="Erase entire chip." alt="" coords="5,5,163,32"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="196,21,163,21,163,16,196,16"/>
+</map>
