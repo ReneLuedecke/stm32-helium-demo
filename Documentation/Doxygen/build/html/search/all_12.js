@@ -5,7 +5,7 @@ var searchData=
   ['temp_5foffset_2',['TEMP_OFFSET',['../main_8c.html#a3cb24f09004f92185b77e9e7bac6ea61',1,'main.c']]],
   ['temp_5fscale_3',['TEMP_SCALE',['../main_8c.html#a37fc2eea145b1cf777795b062ce43500',1,'main.c']]],
   ['temp_5fu16_4',['temp_u16',['../main_8c.html#acf53dbd4c23e86b3d5945a65ccba4007',1,'main.c']]],
-  ['thermal_20pipeline_5',['Thermal-Pipeline',['../group__thermal__pipeline.html',1,'']]],
+  ['thermal_20pipeline_5',['Thermal pipeline',['../group__thermal__pipeline.html',1,'']]],
   ['thermal_5fframe_5fprocess_6',['thermal_frame_process',['../main_8c.html#af80a3267fdaa0f576a90b8b309b5f3d5',1,'main.c']]],
   ['thermal_5fvsync_5finit_7',['thermal_vsync_init',['../main_8c.html#a146935b63d2990b0f6569670f1bd1688',1,'main.c']]],
   ['thermal_5fvsync_5fstart_8',['thermal_vsync_start',['../main_8c.html#ac7bc33868f36b01a0e1129391f38f8c0',1,'main.c']]],

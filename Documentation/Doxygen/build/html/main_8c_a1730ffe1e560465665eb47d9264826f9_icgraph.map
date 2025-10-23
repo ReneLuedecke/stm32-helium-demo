@@ -12,9 +12,9 @@
 <area shape="poly" id="edge6_Node000001_Node000006" title=" " alt="" coords="343,241,263,231,263,226,344,236"/>
 <area shape="rect" id="Node000007" href="$main_8c.html#a70af21c671abfcc773614a9a4f63d920" title="Initialisiert den Systemtakt (PLL, Busse, IC&#45;Domain)." alt="" coords="134,259,280,285"/>
 <area shape="poly" id="edge8_Node000001_Node000007" title=" " alt="" coords="344,258,280,266,279,260,343,252"/>
-<area shape="rect" id="Node000008" href="$main_8c.html#a146935b63d2990b0f6569670f1bd1688" title=" " alt="" coords="142,309,272,336"/>
+<area shape="rect" id="Node000008" href="$main_8c.html#a146935b63d2990b0f6569670f1bd1688" title="Configure TIM2 to emulate the image sensor VSYNC signal." alt="" coords="142,309,272,336"/>
 <area shape="poly" id="edge10_Node000001_Node000008" title=" " alt="" coords="373,271,312,300,273,312,272,307,310,295,371,266"/>
-<area shape="rect" id="Node000009" href="$main_8c.html#ac7bc33868f36b01a0e1129391f38f8c0" title=" " alt="" coords="137,360,276,387"/>
+<area shape="rect" id="Node000009" href="$main_8c.html#ac7bc33868f36b01a0e1129391f38f8c0" title="Start VSYNC generation after the timer has been configured." alt="" coords="137,360,276,387"/>
 <area shape="poly" id="edge12_Node000001_Node000009" title=" " alt="" coords="392,275,358,314,336,334,312,350,278,365,276,360,310,346,333,329,354,310,388,271"/>
 <area shape="rect" id="Node000010" href="$xspi__nor_8c.html#aecd84e9f4d3be12e230d05cb6aba364c" title="Initialize XSPI2 NOR Flash in Octal DTR Mode." alt="" coords="139,411,275,437"/>
 <area shape="poly" id="edge14_Node000001_Node000010" title=" " alt="" coords="400,276,368,339,343,373,312,401,277,418,274,413,310,396,339,369,363,336,396,273"/>

@@ -20,7 +20,7 @@
 <!-- Node2 -->
 <g id="Node000002" class="node">
 <title>Node2</title>
-<g id="a_Node000002"><a xlink:href="main_8c.html" target="_top" xlink:title="Entry&#45;Point und Initialisierung für STM32N6 NUCLEO&#45;Projekt.">
+<g id="a_Node000002"><a xlink:href="main_8c.html" target="_top" xlink:title="Helium&#45;enabled thermal pipeline demo for the STM32N6570 FSBL example.">
 <polygon fill="white" stroke="#666666" points="74.79,-20 29.54,-20 29.54,0 74.79,0 74.79,-20"/>
 <text xml:space="preserve" text-anchor="middle" x="52.16" y="-6.5" font-family="Helvetica,sans-Serif" font-size="10.00">main.c</text>
 </a>

@@ -1,7 +1,7 @@
 var searchData=
 [
   ['pendsv_5fhandler_0',['PendSV_Handler',['../stm32n6xx__it_8c.html#a6303e1f258cbdc1f970ce579cc015623',1,'PendSV_Handler(void):&#160;stm32n6xx_it.c'],['../stm32n6xx__it_8h.html#a6303e1f258cbdc1f970ce579cc015623',1,'PendSV_Handler(void):&#160;stm32n6xx_it.c']]],
-  ['pipeline_1',['Thermal-Pipeline',['../group__thermal__pipeline.html',1,'']]],
+  ['pipeline_1',['Thermal pipeline',['../group__thermal__pipeline.html',1,'']]],
   ['pipeline_20details_2',['Pipeline-Details',['../page_pipeline.html',1,'']]],
   ['pixpatch_3',['PixPatch',['../main_8c.html#a65bcbd219223ad750acc6dca33b36339',1,'main.c']]],
   ['planck_5fc1_4',['PLANCK_C1',['../main_8c.html#a8c11b0d61cbf1ec987b856f5c240db2c',1,'main.c']]],

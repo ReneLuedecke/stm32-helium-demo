@@ -1,6 +1,6 @@
 <map id="xspi_nor.h" name="xspi_nor.h">
 <area shape="rect" id="Node000001" title=" " alt="" coords="42,5,123,32"/>
-<area shape="rect" id="Node000002" href="$main_8c.html" title="Entry&#45;Point und Initialisierung für STM32N6 NUCLEO&#45;Projekt." alt="" coords="5,80,66,107"/>
+<area shape="rect" id="Node000002" href="$main_8c.html" title="Helium&#45;enabled thermal pipeline demo for the STM32N6570 FSBL example." alt="" coords="5,80,66,107"/>
 <area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="68,47,46,81,41,78,64,44"/>
 <area shape="rect" id="Node000003" href="$xspi__nor_8c.html" title=" " alt="" coords="90,80,171,107"/>
 <area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="101,44,124,78,120,81,97,47"/>

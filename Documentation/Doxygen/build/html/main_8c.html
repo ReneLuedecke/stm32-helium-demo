@@ -93,7 +93,7 @@ $(function(){initNavTree('main_8c.html','',''); });
 </div><!--header-->
 <div class="contents">
 
-<p>Entry-Point und Initialisierung für STM32N6 NUCLEO-Projekt.  
+<p>Helium-enabled thermal pipeline demo for the STM32N6570 FSBL example.  
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &quot;<a class="el" href="main_8h_source.html">main.h</a>&quot;</code><br />
 <code>#include &lt;math.h&gt;</code><br />
@@ -154,8 +154,12 @@ Macros</h2></td></tr>
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
 <tr class="memitem:a146935b63d2990b0f6569670f1bd1688" id="r_a146935b63d2990b0f6569670f1bd1688"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a146935b63d2990b0f6569670f1bd1688">thermal_vsync_init</a> (void)</td></tr>
+<tr class="memdesc:a146935b63d2990b0f6569670f1bd1688"><td class="mdescLeft">&#160;</td><td class="mdescRight">Configure TIM2 to emulate the image sensor VSYNC signal.  <br /></td></tr>
 <tr class="memitem:ac7bc33868f36b01a0e1129391f38f8c0" id="r_ac7bc33868f36b01a0e1129391f38f8c0"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ac7bc33868f36b01a0e1129391f38f8c0">thermal_vsync_start</a> (void)</td></tr>
+<tr class="memdesc:ac7bc33868f36b01a0e1129391f38f8c0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Start VSYNC generation after the timer has been configured.  <br /></td></tr>
 <tr class="memitem:af80a3267fdaa0f576a90b8b309b5f3d5" id="r_af80a3267fdaa0f576a90b8b309b5f3d5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#af80a3267fdaa0f576a90b8b309b5f3d5">thermal_frame_process</a> (void)</td></tr>
+<tr class="memdesc:af80a3267fdaa0f576a90b8b309b5f3d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Run a single thermal processing iteration.  <br /></td></tr>
+<tr class="memitem:a6821f0d3d62201280c453b50bbcb9ea2" id="r_a6821f0d3d62201280c453b50bbcb9ea2"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a6821f0d3d62201280c453b50bbcb9ea2">build_bad_pixel_patches</a> (void)</td></tr>
 <tr class="memitem:ac4a1ac0b056dfa29b97d7af1b7ee4c6d" id="r_ac4a1ac0b056dfa29b97d7af1b7ee4c6d"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ac4a1ac0b056dfa29b97d7af1b7ee4c6d">__attribute__</a> ((aligned(64), section(&quot;.axisram1&quot;)))</td></tr>
 <tr class="memitem:ab0d7876e5c3f4cb357a54e885de00a5e" id="r_ab0d7876e5c3f4cb357a54e885de00a5e"><td class="memItemLeft" align="right" valign="top">static uint16_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ab0d7876e5c3f4cb357a54e885de00a5e">encode_temp_to_lut</a> (float t_c, float flag_ref_c)</td></tr>
 <tr class="memdesc:ab0d7876e5c3f4cb357a54e885de00a5e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The application entry point.  <br /></td></tr>
@@ -170,7 +174,7 @@ Functions</h2></td></tr>
 <tr class="memitem:a60261eba3fc793ee811755a2287e7630" id="r_a60261eba3fc793ee811755a2287e7630"><td class="memItemLeft" align="right" valign="top">static void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a60261eba3fc793ee811755a2287e7630">MX_XSPI2_Init</a> (void)</td></tr>
 <tr class="memdesc:a60261eba3fc793ee811755a2287e7630"><td class="mdescLeft">&#160;</td><td class="mdescRight">Initialisiert XSPI2 (Octal DTR MemoryMapped Mode).  <br /></td></tr>
 <tr class="memitem:a04debdab20052dee80b577b764d0d822" id="r_a04debdab20052dee80b577b764d0d822"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a04debdab20052dee80b577b764d0d822">generate_planck_lut</a> (uint16_t *planck_table, float wavelength_um, float radiance_scale, float flag_temp_c)</td></tr>
-<tr class="memdesc:a04debdab20052dee80b577b764d0d822"><td class="mdescLeft">&#160;</td><td class="mdescRight">Erzeugt Planck-basierte LUT (nicht aktiv in Demo).  <br /></td></tr>
+<tr class="memdesc:a04debdab20052dee80b577b764d0d822"><td class="mdescLeft">&#160;</td><td class="mdescRight">Populate the Planck-based lookup table used for radiance conversion.  <br /></td></tr>
 <tr class="memitem:a7ecab6183c8feb5dd79ce233ee40a914" id="r_a7ecab6183c8feb5dd79ce233ee40a914"><td class="memItemLeft" align="right" valign="top">float&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a7ecab6183c8feb5dd79ce233ee40a914">decode_temperature</a> (uint16_t value)</td></tr>
 <tr class="memitem:a871eca9b13486157307efb50271ab52a" id="r_a871eca9b13486157307efb50271ab52a"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a871eca9b13486157307efb50271ab52a">init_planck_lut</a> (void)</td></tr>
 <tr class="memitem:abbb9cd5d6c8b13356d801322b2b3a5df" id="r_abbb9cd5d6c8b13356d801322b2b3a5df"><td class="memItemLeft" align="right" valign="top">static uint16_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#abbb9cd5d6c8b13356d801322b2b3a5df">gain_to_q15</a> (float gain)</td></tr>
@@ -179,6 +183,7 @@ Functions</h2></td></tr>
 <tr class="memitem:a95e55441d0d167805773df306e629006" id="r_a95e55441d0d167805773df306e629006"><td class="memItemLeft" align="right" valign="top">static void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a95e55441d0d167805773df306e629006">XSPI_NOR_OctalDTRModeCfg</a> (XSPI_HandleTypeDef *hxspi)</td></tr>
 <tr class="memdesc:a95e55441d0d167805773df306e629006"><td class="mdescLeft">&#160;</td><td class="mdescRight">This function configure the memory in Octal DTR mode.  <br /></td></tr>
 <tr class="memitem:a8a3b0ad512a6e6c6157440b68d395eac" id="r_a8a3b0ad512a6e6c6157440b68d395eac"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a8a3b0ad512a6e6c6157440b68d395eac">HAL_TIM_PeriodElapsedCallback</a> (TIM_HandleTypeDef *htim)</td></tr>
+<tr class="memdesc:a8a3b0ad512a6e6c6157440b68d395eac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Timer event handler that signals the availability of a new frame.  <br /></td></tr>
 <tr class="memitem:a57b7165e412776898d3f33d9bd67bd21" id="r_a57b7165e412776898d3f33d9bd67bd21"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a57b7165e412776898d3f33d9bd67bd21">decode_temperature_int</a> (uint16_t value, uint32_t *temp_int, uint32_t *temp_frac, uint8_t *is_negative)</td></tr>
 <tr class="memdesc:a57b7165e412776898d3f33d9bd67bd21"><td class="mdescLeft">&#160;</td><td class="mdescRight">Decode temperature - Integer version (no float printf needed!).  <br /></td></tr>
 <tr class="memitem:a5c6d9e8b9de496d782af00a41d9caf5f" id="r_a5c6d9e8b9de496d782af00a41d9caf5f"><td class="memItemLeft" align="right" valign="top">float&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a5c6d9e8b9de496d782af00a41d9caf5f">calculate_radiance_scale</a> (uint16_t adc_min, uint16_t adc_max, float temp_min, float temp_max)</td></tr>
@@ -201,11 +206,10 @@ Functions</h2></td></tr>
 <tr class="memitem:a7f78882baee3fc59805caf946080e87a" id="r_a7f78882baee3fc59805caf946080e87a"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a7f78882baee3fc59805caf946080e87a">init_gain_frame</a> (void)</td></tr>
 <tr class="memitem:a0c812f36c1ef61c14011a1a39b9cf4bd" id="r_a0c812f36c1ef61c14011a1a39b9cf4bd"><td class="memItemLeft" align="right" valign="top">static void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a0c812f36c1ef61c14011a1a39b9cf4bd">correct_bad_pixels_line_fast</a> (uint16_t *__restrict__ output_line, const uint16_t *__restrict__ prev_line, const uint16_t *__restrict__ next_line, uint16_t y)</td></tr>
 <tr class="memitem:a7c547974e57013d24e39911f53aaf9c5" id="r_a7c547974e57013d24e39911f53aaf9c5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a7c547974e57013d24e39911f53aaf9c5">load_bad_pixel_map</a> (void)</td></tr>
-<tr class="memitem:a6821f0d3d62201280c453b50bbcb9ea2" id="r_a6821f0d3d62201280c453b50bbcb9ea2"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a6821f0d3d62201280c453b50bbcb9ea2">build_bad_pixel_patches</a> (void)</td></tr>
 <tr class="memitem:aa0b165ee0243de66bdec55131c5a4103" id="r_aa0b165ee0243de66bdec55131c5a4103"><td class="memItemLeft" align="right" valign="top">static void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aa0b165ee0243de66bdec55131c5a4103">apply_bad_pixel_patches</a> (uint16_t *__restrict__ frame, uint32_t count)</td></tr>
-<tr class="memdesc:aa0b165ee0243de66bdec55131c5a4103"><td class="mdescLeft">&#160;</td><td class="mdescRight">Anwenden der Bad-Pixel-Patches (zweiphasig).  <br /></td></tr>
+<tr class="memdesc:aa0b165ee0243de66bdec55131c5a4103"><td class="mdescLeft">&#160;</td><td class="mdescRight">Apply the two-phase bad pixel patches generated during calibration.  <br /></td></tr>
 <tr class="memitem:a109c9136dd8ff3e1bb95c9f2ab5de884" id="r_a109c9136dd8ff3e1bb95c9f2ab5de884"><td class="memItemLeft" align="right" valign="top">static void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a109c9136dd8ff3e1bb95c9f2ab5de884">correct_bad_pixels_simple</a> (uint16_t frame[<a class="el" href="#aa2a026641321bd936723bdf669514418">VPIX</a>][<a class="el" href="#a68264655941a434f43e80a949c719baa">HPIX</a>])</td></tr>
-<tr class="memdesc:a109c9136dd8ff3e1bb95c9f2ab5de884"><td class="mdescLeft">&#160;</td><td class="mdescRight">Korrigiert fehlerhafte Pixel (einfache Variante).  <br /></td></tr>
+<tr class="memdesc:a109c9136dd8ff3e1bb95c9f2ab5de884"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fallback single-pass bad pixel correction.  <br /></td></tr>
 <tr class="memitem:a840291bc02cba5474a4cb46a9b9566fe" id="r_a840291bc02cba5474a4cb46a9b9566fe"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a840291bc02cba5474a4cb46a9b9566fe">main</a> (void)</td></tr>
 <tr class="memdesc:a840291bc02cba5474a4cb46a9b9566fe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Hauptprogramm-Einstiegspunkt.  <br /></td></tr>
 <tr class="memitem:a1730ffe1e560465665eb47d9264826f9" id="r_a1730ffe1e560465665eb47d9264826f9"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a1730ffe1e560465665eb47d9264826f9">Error_Handler</a> (void)</td></tr>
@@ -234,14 +238,8 @@ Variables</h2></td></tr>
 <tr class="memitem:a0523c05685d59544dca911cb6a3db77d" id="r_a0523c05685d59544dca911cb6a3db77d"><td class="memItemLeft" align="right" valign="top">return&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a0523c05685d59544dca911cb6a3db77d">ch</a></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Entry-Point und Initialisierung für STM32N6 NUCLEO-Projekt. </p>
-<ul>
-<li>Takt-/Cache-Init, GPIO/USART/XSPI Setup</li>
-<li>Temperatur-LUT-Erzeugung (linear/Planck)</li>
-<li>Zeilenweise Thermal-Pipeline (Dark, Gain, Offset, LUT, BPR) – Hotpath per MVE/Helium</li>
-<li>Timing/Profiling via DWT, Frame-Loop via TIM-IRQ (VSYNC ~50 Hz)</li>
-</ul>
-<dl class="section note"><dt>Note</dt><dd>Diese Datei wurde automatisch mit Doxygen-Kommentaren angereichert. Bitte die Beschreibungen bei Bedarf konkretisieren. </dd></dl>
+<div class="textblock"><p>Helium-enabled thermal pipeline demo for the STM32N6570 FSBL example. </p>
+<p>The module starts the first-stage bootloader demo, configures the system peripherals (clock tree, GPIO, USART, XSPI) and runs the thermal image processing pipeline. The pipeline converts raw sensor lines into temperature compensated values using dark-frame subtraction, per-pixel gain, offset correction, lookup-table linearisation and bad-pixel repair accelerated with Arm Helium instructions. </p>
 </div><a name="doc-define-members" id="doc-define-members"></a><h2 id="header-doc-define-members" class="groupheader">Macro Definition Documentation</h2>
 <a id="aa5a3ec1c38a8b8f06136ac009518b85b" name="aa5a3ec1c38a8b8f06136ac009518b85b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa5a3ec1c38a8b8f06136ac009518b85b">&#9670;&#160;</a></span>ADC_TO_RADIANCE_SCALE</h2>
@@ -406,7 +404,7 @@ Variables</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <b>Value:</b><div class="fragment"><div class="line">(GPIOG-&gt;BSRR = (<a class="code hl_define" href="#a53f9670b915a28d987db1c08b25dedad">LED1_Pin</a> &lt;&lt; 16))</div>
-<div class="ttc" id="amain_8c_html_a53f9670b915a28d987db1c08b25dedad"><div class="ttname"><a href="#a53f9670b915a28d987db1c08b25dedad">LED1_Pin</a></div><div class="ttdeci">#define LED1_Pin</div><div class="ttdef"><b>Definition</b> main.c:65</div></div>
+<div class="ttc" id="amain_8c_html_a53f9670b915a28d987db1c08b25dedad"><div class="ttname"><a href="#a53f9670b915a28d987db1c08b25dedad">LED1_Pin</a></div><div class="ttdeci">#define LED1_Pin</div><div class="ttdef"><b>Definition</b> main.c:64</div></div>
 </div><!-- fragment -->
 </div>
 </div>
@@ -799,16 +797,15 @@ Here is the caller graph for this function:</div>
 </table>
 </div><div class="memdoc">
 
-<p>Anwenden der Bad-Pixel-Patches (zweiphasig). </p>
+<p>Apply the two-phase bad pixel patches generated during calibration. </p>
+<p>Reads all replacement pixels before writing them back so that no corrected value is sampled twice while iterating through the patch list.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">frame</td><td>[uint16_t*] Frame-Daten </td></tr>
-    <tr><td class="paramname">count</td><td>[uint32_t] Anzahl der Patches </td></tr>
+    <tr><td class="paramname">frame</td><td>Frame buffer to update in place. </td></tr>
+    <tr><td class="paramname">count</td><td>Active patch entries stored in g_patches. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>void </dd></dl>
-<dl class="section note"><dt>Note</dt><dd>Vermeidet Read-after-Write-Artefakte. </dd></dl>
 
 </div>
 </div>
@@ -976,16 +973,14 @@ Here is the call graph for this function:</div>
 </table>
 </div><div class="memdoc">
 
-<p>Korrigiert fehlerhafte Pixel (einfache Variante). </p>
+<p>Fallback single-pass bad pixel correction. </p>
+<p>Uses the pre-sorted bad pixel table to copy neighbouring replacement values without relying on the two-phase patching helper.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">frame</td><td>[uint16_t*] Eingabeframe </td></tr>
-    <tr><td class="paramname">width</td><td>[uint32_t] Breite </td></tr>
-    <tr><td class="paramname">height</td><td>[uint32_t] Höhe </td></tr>
+    <tr><td class="paramname">frame</td><td>Frame addressed as [VPIX][HPIX]. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>void </dd></dl>
 <div class="dynheader">
 Here is the caller graph for this function:</div>
 <div class="dyncontent">
@@ -1262,17 +1257,17 @@ Here is the caller graph for this function:</div>
       </table>
 </div><div class="memdoc">
 
-<p>Erzeugt Planck-basierte LUT (nicht aktiv in Demo). </p>
+<p>Populate the Planck-based lookup table used for radiance conversion. </p>
+<p>Converts raw ADC codes into centidegree-scaled temperatures using the provided optical parameters so the pipeline can linearise sensor readings.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">planck_table</td><td>[uint16_t*] LUT-Zeiger </td></tr>
-    <tr><td class="paramname">emissivity</td><td>[float] Emissionsgrad </td></tr>
-    <tr><td class="paramname">temp_min</td><td>[float] Minimaltemperatur [°C] </td></tr>
-    <tr><td class="paramname">temp_max</td><td>[float] Maximaltemperatur [°C] </td></tr>
+    <tr><td class="paramname">planck_table</td><td>Destination LUT buffer (65536 entries). </td></tr>
+    <tr><td class="paramname">wavelength_um</td><td>Sensor centre wavelength in micrometres. </td></tr>
+    <tr><td class="paramname">radiance_scale</td><td>Scale factor that maps ADC units to radiance. </td></tr>
+    <tr><td class="paramname">flag_temp_c</td><td>Reference flag temperature in degrees Celsius. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>void </dd></dl>
 
 </div>
 </div>
@@ -1290,6 +1285,9 @@ Here is the caller graph for this function:</div>
         </tr>
       </table>
 </div><div class="memdoc">
+
+<p>Timer event handler that signals the availability of a new frame. </p>
+<p>When TIM2 reaches its period, the callback increments the VSYNC counter, sets frame_ready and calls <a class="el" href="#af80a3267fdaa0f576a90b8b309b5f3d5">thermal_frame_process</a>. </p>
 <div class="dynheader">
 Here is the call graph for this function:</div>
 <div class="dyncontent">
@@ -1973,6 +1971,9 @@ Here is the caller graph for this function:</div>
         </tr>
       </table>
 </div><div class="memdoc">
+
+<p>Run a single thermal processing iteration. </p>
+<p>The VSYNC interrupt invokes this hook to process the next frame. The current implementation keeps track of processed frames and is the integration point for the dark, gain, offset, LUT and bad-pixel stages. </p>
 <div class="dynheader">
 Here is the caller graph for this function:</div>
 <div class="dyncontent">
@@ -1995,6 +1996,9 @@ Here is the caller graph for this function:</div>
         </tr>
       </table>
 </div><div class="memdoc">
+
+<p>Configure TIM2 to emulate the image sensor VSYNC signal. </p>
+<p>The timer generates periodic interrupts at roughly 50 Hz. Each trigger moves the pipeline forward by scheduling a new frame for processing. </p>
 <div class="dynheader">
 Here is the call graph for this function:</div>
 <div class="dyncontent">
@@ -2022,6 +2026,9 @@ Here is the caller graph for this function:</div>
         </tr>
       </table>
 </div><div class="memdoc">
+
+<p>Start VSYNC generation after the timer has been configured. </p>
+<p>This runs TIM2 in interrupt mode so that <a class="el" href="#a8a3b0ad512a6e6c6157440b68d395eac">HAL_TIM_PeriodElapsedCallback</a> can mark frames ready for the processing loop. </p>
 <div class="dynheader">
 Here is the call graph for this function:</div>
 <div class="dyncontent">
@@ -2375,7 +2382,7 @@ Here is the caller graph for this function:</div>
 </div><div class="memdoc">
 <b>Initial value:</b><div class="fragment"><div class="line">{</div>
 <div class="line">    HAL_UART_Transmit(&amp;<a class="code hl_variable" href="#a2cf715bef37f7e8ef385a30974a5f0d5">huart1</a>, (uint8_t *)&amp;<a class="code hl_variable" href="#a0523c05685d59544dca911cb6a3db77d">ch</a>, 1, 0xFFFF)</div>
-<div class="ttc" id="amain_8c_html_a0523c05685d59544dca911cb6a3db77d"><div class="ttname"><a href="#a0523c05685d59544dca911cb6a3db77d">ch</a></div><div class="ttdeci">return ch</div><div class="ttdef"><b>Definition</b> main.c:1820</div></div>
+<div class="ttc" id="amain_8c_html_a0523c05685d59544dca911cb6a3db77d"><div class="ttname"><a href="#a0523c05685d59544dca911cb6a3db77d">ch</a></div><div class="ttdeci">return ch</div><div class="ttdef"><b>Definition</b> main.c:1852</div></div>
 <div class="ttc" id="amain_8c_html_a2cf715bef37f7e8ef385a30974a5f0d5"><div class="ttname"><a href="#a2cf715bef37f7e8ef385a30974a5f0d5">huart1</a></div><div class="ttdeci">UART_HandleTypeDef huart1</div><div class="ttdef"><b>Definition</b> main.c:96</div></div>
 </div><!-- fragment -->
 </div>

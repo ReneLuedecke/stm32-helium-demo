@@ -1,5 +1,5 @@
 <map id="thermal_vsync_init" name="thermal_vsync_init">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,5,136,32"/>
+<area shape="rect" id="Node000001" title="Configure TIM2 to emulate the image sensor VSYNC signal." alt="" coords="5,5,136,32"/>
 <area shape="rect" id="Node000002" href="$main_8c.html#a1730ffe1e560465665eb47d9264826f9" title="This function is executed in case of error occurrence." alt="" coords="184,5,285,32"/>
 <area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="136,16,168,16,168,21,136,21"/>
 </map>

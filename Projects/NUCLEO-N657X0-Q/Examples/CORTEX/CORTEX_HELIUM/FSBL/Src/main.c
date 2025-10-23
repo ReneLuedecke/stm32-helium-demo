@@ -1,20 +1,19 @@
 /* USER CODE BEGIN Header */
-/** 
+/**
  * @file main.c
- * @brief Entry-Point und Initialisierung für STM32N6 NUCLEO-Projekt.
- * @details
- *  - Takt-/Cache-Init, GPIO/USART/XSPI Setup
- *  - Temperatur-LUT-Erzeugung (linear/Planck)
- *  - Zeilenweise Thermal-Pipeline (Dark, Gain, Offset, LUT, BPR) – Hotpath per MVE/Helium
- *  - Timing/Profiling via DWT, Frame-Loop via TIM-IRQ (VSYNC ~50 Hz)
+ * @brief Helium-enabled thermal pipeline demo for the STM32N6570 FSBL example.
  *
- * @note Diese Datei wurde automatisch mit Doxygen-Kommentaren angereichert.
- *       Bitte die Beschreibungen bei Bedarf konkretisieren.
+ * The module starts the first-stage bootloader demo, configures the system
+ * peripherals (clock tree, GPIO, USART, XSPI) and runs the thermal image
+ * processing pipeline. The pipeline converts raw sensor lines into temperature
+ * compensated values using dark-frame subtraction, per-pixel gain, offset
+ * correction, lookup-table linearisation and bad-pixel repair accelerated with
+ * Arm Helium instructions.
  */
 
 /**
- * @defgroup thermal_pipeline Thermal-Pipeline
- * @brief Dark/Gain/Offset/LUT/BPR – zeilenweise Verarbeitung mit Helium/MVE.
+ * @defgroup thermal_pipeline Thermal pipeline
+ * @brief Line-based dark, gain, offset, LUT and bad-pixel processing accelerated with Helium/MVE.
  * @{
  * @}
  */
@@ -83,6 +82,7 @@ extern TIM_HandleTypeDef htim2;
 void thermal_vsync_init(void);
 void thermal_vsync_start(void);
 void thermal_frame_process(void);
+void build_bad_pixel_patches(void);
 
 /* USER CODE END PD */
 
@@ -350,6 +350,12 @@ int iar_fputc(int ch);
 #endif
 #endif
 
+/**
+ * @brief Configure TIM2 to emulate the image sensor VSYNC signal.
+ *
+ * The timer generates periodic interrupts at roughly 50 Hz. Each trigger moves
+ * the pipeline forward by scheduling a new frame for processing.
+ */
 void thermal_vsync_init(void) {
     TIM_ClockConfigTypeDef sClockSourceConfig = {0};
     TIM_MasterConfigTypeDef sMasterConfig = {0};
@@ -390,6 +396,12 @@ void thermal_vsync_init(void) {
     printf("✓ Timer2 initialized: 50 Hz VSYNC\n");
 }
 
+/**
+ * @brief Start VSYNC generation after the timer has been configured.
+ *
+ * This runs TIM2 in interrupt mode so that @ref HAL_TIM_PeriodElapsedCallback
+ * can mark frames ready for the processing loop.
+ */
 void thermal_vsync_start(void) {
     if (HAL_TIM_Base_Start_IT(&htim2) != HAL_OK) {
         printf("ERROR: Timer2 start failed!\n");
@@ -398,6 +410,13 @@ void thermal_vsync_start(void) {
     printf("✓ Timer2 started\n");
 }
 
+/**
+ * @brief Run a single thermal processing iteration.
+ *
+ * The VSYNC interrupt invokes this hook to process the next frame. The current
+ * implementation keeps track of processed frames and is the integration point
+ * for the dark, gain, offset, LUT and bad-pixel stages.
+ */
 void thermal_frame_process(void) {
     // Placeholder - will be filled later
     frames_processed++;
@@ -413,6 +432,12 @@ void thermal_frame_process(void) {
 //    }
 }
 
+/**
+ * @brief Timer event handler that signals the availability of a new frame.
+ *
+ * When TIM2 reaches its period, the callback increments the VSYNC counter,
+ * sets frame_ready and calls @ref thermal_frame_process.
+ */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM2) {
@@ -429,12 +454,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 // ═══════════════════════════════════════════════════════════════════
 
 /**
- * @brief Erzeugt Planck-basierte LUT (nicht aktiv in Demo).
- * @param planck_table [uint16_t*] LUT-Zeiger
- * @param emissivity [float] Emissionsgrad
- * @param temp_min [float] Minimaltemperatur [°C]
- * @param temp_max [float] Maximaltemperatur [°C]
- * @return void
+ * @brief Populate the Planck-based lookup table used for radiance conversion.
+ *
+ * Converts raw ADC codes into centidegree-scaled temperatures using the
+ * provided optical parameters so the pipeline can linearise sensor readings.
+ *
+ * @param planck_table Destination LUT buffer (65536 entries).
+ * @param wavelength_um Sensor centre wavelength in micrometres.
+ * @param radiance_scale Scale factor that maps ADC units to radiance.
+ * @param flag_temp_c Reference flag temperature in degrees Celsius.
  */
 void generate_planck_lut(
     uint16_t *planck_table,
@@ -1221,6 +1249,24 @@ void load_bad_pixel_map(void) {
         g_num_patches = 0;
     }
 }
+
+/**
+ * @brief Apply the two-phase bad pixel patches generated during calibration.
+ *
+ * Reads all replacement pixels before writing them back so that no corrected
+ * value is sampled twice while iterating through the patch list.
+ *
+ * @param frame Frame buffer to update in place.
+ * @param count Active patch entries stored in g_patches.
+ */
+static inline void apply_bad_pixel_patches(uint16_t * __restrict__ frame, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; ++i)
+        g_patch_values[i] = frame[g_patches[i].src];
+
+    for (uint32_t i = 0; i < count; ++i)
+        frame[g_patches[i].dst] = g_patch_values[i];
+}
 void build_bad_pixel_patches(void)
 {
     g_num_patches = 0;
@@ -1285,26 +1331,12 @@ void build_bad_pixel_patches(void)
     printf("BPR: %lu valid patches\n", (unsigned long)g_num_patches);
 }
 /**
- * @brief Anwenden der Bad-Pixel-Patches (zweiphasig).
- * @param frame [uint16_t*] Frame-Daten
- * @param count [uint32_t] Anzahl der Patches
- * @return void
- * @note Vermeidet Read-after-Write-Artefakte.
- */
-static inline void apply_bad_pixel_patches(uint16_t * __restrict__ frame, uint32_t count)
-{
-    for (uint32_t i = 0; i < count; ++i)
-        g_patch_values[i] = frame[g_patches[i].src];
-
-    for (uint32_t i = 0; i < count; ++i)
-        frame[g_patches[i].dst] = g_patch_values[i];
-}
-/**
- * @brief Korrigiert fehlerhafte Pixel (einfache Variante).
- * @param frame [uint16_t*] Eingabeframe
- * @param width [uint32_t] Breite
- * @param height [uint32_t] Höhe
- * @return void
+ * @brief Fallback single-pass bad pixel correction.
+ *
+ * Uses the pre-sorted bad pixel table to copy neighbouring replacement values
+ * without relying on the two-phase patching helper.
+ *
+ * @param frame Frame addressed as [VPIX][HPIX].
  */
 static inline void correct_bad_pixels_simple(uint16_t frame[VPIX][HPIX]) {
     for (uint16_t i = 0; i < total_bad_pixels; i++) {

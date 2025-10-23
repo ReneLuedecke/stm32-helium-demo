@@ -11,7 +11,7 @@
 <!-- Node1 -->
 <g id="Node000001" class="node">
 <title>Node1</title>
-<g id="a_Node000001"><a xlink:title="Entry&#45;Point und Initialisierung für STM32N6 NUCLEO&#45;Projekt.">
+<g id="a_Node000001"><a xlink:title="Helium&#45;enabled thermal pipeline demo for the STM32N6570 FSBL example.">
 <polygon fill="#999999" stroke="#666666" points="256.59,-256 211.34,-256 211.34,-236 256.59,-236 256.59,-256"/>
 <text xml:space="preserve" text-anchor="middle" x="233.97" y="-242.5" font-family="Helvetica,sans-Serif" font-size="10.00">main.c</text>
 </a>

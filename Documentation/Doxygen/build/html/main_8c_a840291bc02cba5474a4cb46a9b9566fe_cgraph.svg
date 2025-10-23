@@ -20,7 +20,7 @@
 <!-- Node2 -->
 <g id="Node000002" class="node">
 <title>Node2</title>
-<g id="a_Node000002"><a xlink:href="main_8c.html#a109c9136dd8ff3e1bb95c9f2ab5de884" target="_top" xlink:title="Korrigiert fehlerhafte Pixel (einfache Variante).">
+<g id="a_Node000002"><a xlink:href="main_8c.html#a109c9136dd8ff3e1bb95c9f2ab5de884" target="_top" xlink:title="Fallback single&#45;pass bad pixel correction.">
 <polygon fill="white" stroke="#666666" points="200,-778 102.25,-778 102.25,-746 200,-746 200,-778"/>
 <text xml:space="preserve" text-anchor="start" x="110.25" y="-764.5" font-family="Helvetica,sans-Serif" font-size="10.00">correct_bad_pixels</text>
 <text xml:space="preserve" text-anchor="middle" x="151.12" y="-752.5" font-family="Helvetica,sans-Serif" font-size="10.00">_simple</text>
@@ -329,7 +329,7 @@
 <!-- Node21 -->
 <g id="Node000021" class="node">
 <title>Node21</title>
-<g id="a_Node000021"><a xlink:href="main_8c.html#a146935b63d2990b0f6569670f1bd1688" target="_top" xlink:title=" ">
+<g id="a_Node000021"><a xlink:href="main_8c.html#a146935b63d2990b0f6569670f1bd1688" target="_top" xlink:title="Configure TIM2 to emulate the image sensor VSYNC signal.">
 <polygon fill="white" stroke="#666666" points="200,-134 102.25,-134 102.25,-114 200,-114 200,-134"/>
 <text xml:space="preserve" text-anchor="middle" x="151.12" y="-120.5" font-family="Helvetica,sans-Serif" font-size="10.00">thermal_vsync_init</text>
 </a>
@@ -347,7 +347,7 @@
 <!-- Node22 -->
 <g id="Node000022" class="node">
 <title>Node22</title>
-<g id="a_Node000022"><a xlink:href="main_8c.html#ac7bc33868f36b01a0e1129391f38f8c0" target="_top" xlink:title=" ">
+<g id="a_Node000022"><a xlink:href="main_8c.html#ac7bc33868f36b01a0e1129391f38f8c0" target="_top" xlink:title="Start VSYNC generation after the timer has been configured.">
 <polygon fill="white" stroke="#666666" points="203.38,-58 98.88,-58 98.88,-38 203.38,-38 203.38,-58"/>
 <text xml:space="preserve" text-anchor="middle" x="151.12" y="-44.5" font-family="Helvetica,sans-Serif" font-size="10.00">thermal_vsync_start</text>
 </a>

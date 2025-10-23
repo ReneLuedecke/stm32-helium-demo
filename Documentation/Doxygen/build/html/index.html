@@ -96,7 +96,7 @@ $(function(){initNavTree('index.html','',''); });
 <p><b>Ziel</b> <br  />
  Thermal-Pipeline (640×480): Dark → Q15-Gain → Flag/Offset → LUT → BPR; XSPI (OPI-DTR, MMAP); DWT-Profiling.</p>
 <p><b>Architektur</b></p><ul>
-<li><span class="tt"><a class="el" href="main_8c.html" title="Entry-Point und Initialisierung für STM32N6 NUCLEO-Projekt.">main.c</a></span>: Boot/Init (Clock, GPIO, UART, XSPI, TIM2, DWT) + Frame-Loop</li>
+<li><span class="tt"><a class="el" href="main_8c.html" title="Helium-enabled thermal pipeline demo for the STM32N6570 FSBL example.">main.c</a></span>: Boot/Init (Clock, GPIO, UART, XSPI, TIM2, DWT) + Frame-Loop</li>
 <li><span class="tt">thermal_pipeline.c/.h</span>: Zeilenverarbeitung (MVE/Q15) + LUT</li>
 <li><span class="tt">calibration.c/.h</span>: Dark-FSM, inverse LUT (Flag→ADC)</li>
 <li><span class="tt">bpr.c/.h</span>: Bad-Pixel-Korrektur</li>

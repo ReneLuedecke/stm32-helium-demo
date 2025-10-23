@@ -1,5 +1,5 @@
 <map id="main.c" name="main.c">
-<area shape="rect" id="Node000001" title="Entry&#45;Point und Initialisierung für STM32N6 NUCLEO&#45;Projekt." alt="" coords="287,5,347,32"/>
+<area shape="rect" id="Node000001" title="Helium&#45;enabled thermal pipeline demo for the STM32N6570 FSBL example." alt="" coords="287,5,347,32"/>
 <area shape="rect" id="Node000002" href="$main_8h.html" title=": Header for main.c file. This file contains the common defines of the application." alt="" coords="79,155,139,181"/>
 <area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="287,24,219,29,137,39,60,56,32,68,14,82,9,91,9,99,19,117,40,133,66,147,64,152,37,138,15,120,3,101,4,89,10,78,30,63,59,51,136,34,219,23,287,19"/>
 <area shape="rect" id="Node000004" title=" " alt="" coords="24,80,85,107"/>

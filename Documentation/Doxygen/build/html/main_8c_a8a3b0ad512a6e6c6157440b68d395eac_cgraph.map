@@ -1,5 +1,5 @@
 <map id="HAL_TIM_PeriodElapsedCallback" name="HAL_TIM_PeriodElapsedCallback">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,5,225,32"/>
-<area shape="rect" id="Node000002" href="$main_8c.html#af80a3267fdaa0f576a90b8b309b5f3d5" title=" " alt="" coords="273,5,430,32"/>
+<area shape="rect" id="Node000001" title="Timer event handler that signals the availability of a new frame." alt="" coords="5,5,225,32"/>
+<area shape="rect" id="Node000002" href="$main_8c.html#af80a3267fdaa0f576a90b8b309b5f3d5" title="Run a single thermal processing iteration." alt="" coords="273,5,430,32"/>
 <area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="225,16,257,16,257,21,225,21"/>
 </map>

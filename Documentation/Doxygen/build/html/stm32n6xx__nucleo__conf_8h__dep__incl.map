@@ -6,7 +6,7 @@
 <area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="224,39,278,77,275,82,221,44"/>
 <area shape="rect" id="Node000003" href="$stm32n6xx__nucleo_8c.html" title="This file provides a set of firmware functions to manage: LEDs push&#45;buttons COM ports available on ST..." alt="" coords="5,155,147,181"/>
 <area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="94,122,83,155,78,153,89,120"/>
-<area shape="rect" id="Node000005" href="$main_8c.html" title="Entry&#45;Point und Initialisierung für STM32N6 NUCLEO&#45;Projekt." alt="" coords="244,229,305,256"/>
+<area shape="rect" id="Node000005" href="$main_8c.html" title="Helium&#45;enabled thermal pipeline demo for the STM32N6570 FSBL example." alt="" coords="244,229,305,256"/>
 <area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="252,117,229,134,212,156,209,166,209,175,219,195,236,212,255,227,252,231,232,216,214,198,204,177,203,165,207,153,225,130,249,112"/>
 <area shape="rect" id="Node000006" href="$stm32n6xx__nucleo__xspi_8c.html" title=" " alt="" coords="222,155,394,181"/>
 <area shape="poly" id="edge5_Node000004_Node000006" title=" " alt="" coords="302,122,308,154,303,155,297,123"/>

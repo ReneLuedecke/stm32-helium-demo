@@ -128,7 +128,7 @@
 <!-- Node8 -->
 <g id="Node000008" class="node">
 <title>Node8</title>
-<g id="a_Node000008"><a xlink:href="main_8c.html#a146935b63d2990b0f6569670f1bd1688" target="_top" xlink:title=" ">
+<g id="a_Node000008"><a xlink:href="main_8c.html#a146935b63d2990b0f6569670f1bd1688" target="_top" xlink:title="Configure TIM2 to emulate the image sensor VSYNC signal.">
 <polygon fill="white" stroke="#666666" points="200,-134 102.25,-134 102.25,-114 200,-114 200,-134"/>
 <text xml:space="preserve" text-anchor="middle" x="151.12" y="-120.5" font-family="Helvetica,sans-Serif" font-size="10.00">thermal_vsync_init</text>
 </a>
@@ -146,7 +146,7 @@
 <!-- Node9 -->
 <g id="Node000009" class="node">
 <title>Node9</title>
-<g id="a_Node000009"><a xlink:href="main_8c.html#ac7bc33868f36b01a0e1129391f38f8c0" target="_top" xlink:title=" ">
+<g id="a_Node000009"><a xlink:href="main_8c.html#ac7bc33868f36b01a0e1129391f38f8c0" target="_top" xlink:title="Start VSYNC generation after the timer has been configured.">
 <polygon fill="white" stroke="#666666" points="203.38,-96 98.88,-96 98.88,-76 203.38,-76 203.38,-96"/>
 <text xml:space="preserve" text-anchor="middle" x="151.12" y="-82.5" font-family="Helvetica,sans-Serif" font-size="10.00">thermal_vsync_start</text>
 </a>

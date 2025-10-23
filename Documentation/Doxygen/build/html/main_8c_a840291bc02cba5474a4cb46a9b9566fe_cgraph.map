@@ -1,6 +1,6 @@
 <map id="main" name="main">
 <area shape="rect" id="Node000001" title="Hauptprogramm&#45;Einstiegspunkt." alt="" coords="5,503,55,529"/>
-<area shape="rect" id="Node000002" href="$main_8c.html#a109c9136dd8ff3e1bb95c9f2ab5de884" title="Korrigiert fehlerhafte Pixel (einfache Variante)." alt="" coords="142,5,272,48"/>
+<area shape="rect" id="Node000002" href="$main_8c.html#a109c9136dd8ff3e1bb95c9f2ab5de884" title="Fallback single&#45;pass bad pixel correction." alt="" coords="142,5,272,48"/>
 <area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="29,502,32,414,43,281,52,212,64,148,80,95,101,58,126,39,129,44,105,62,85,97,69,149,57,213,48,282,38,414,34,503"/>
 <area shape="rect" id="Node000003" href="$main_8c.html#af4b7e8a72db498ee767f48bca7fcfcf3" title=" " alt="" coords="125,72,289,99"/>
 <area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="29,502,34,422,45,304,54,243,66,187,82,141,101,109,110,101,113,105,105,112,86,143,71,188,59,244,50,305,39,422,34,502"/>
@@ -34,9 +34,9 @@
 <area shape="poly" id="edge20_Node000001_Node000019" title=" " alt="" coords="36,529,43,588,58,669,78,749,91,779,105,800,108,802,104,806,101,803,86,782,73,750,53,671,38,589,30,530"/>
 <area shape="rect" id="Node000020" href="$main_8c.html#a70af21c671abfcc773614a9a4f63d920" title="Initialisiert den Systemtakt (PLL, Busse, IC&#45;Domain)." alt="" coords="134,528,280,555"/>
 <area shape="poly" id="edge21_Node000001_Node000020" title=" " alt="" coords="56,517,119,526,119,531,55,522"/>
-<area shape="rect" id="Node000021" href="$main_8c.html#a146935b63d2990b0f6569670f1bd1688" title=" " alt="" coords="142,864,272,891"/>
+<area shape="rect" id="Node000021" href="$main_8c.html#a146935b63d2990b0f6569670f1bd1688" title="Configure TIM2 to emulate the image sensor VSYNC signal." alt="" coords="142,864,272,891"/>
 <area shape="poly" id="edge23_Node000001_Node000021" title=" " alt="" coords="35,529,41,597,55,694,75,789,89,826,105,850,128,866,125,870,101,854,84,828,70,790,49,695,36,598,30,530"/>
-<area shape="rect" id="Node000022" href="$main_8c.html#ac7bc33868f36b01a0e1129391f38f8c0" title=" " alt="" coords="137,965,276,992"/>
+<area shape="rect" id="Node000022" href="$main_8c.html#ac7bc33868f36b01a0e1129391f38f8c0" title="Start VSYNC generation after the timer has been configured." alt="" coords="137,965,276,992"/>
 <area shape="poly" id="edge25_Node000001_Node000022" title=" " alt="" coords="34,530,38,614,50,738,59,803,71,863,86,912,105,945,125,961,122,965,101,948,81,914,66,864,53,804,44,739,33,614,29,530"/>
 <area shape="rect" id="Node000023" href="$main_8c.html#a95e55441d0d167805773df306e629006" title="This function configure the memory in Octal DTR mode." alt="" coords="103,1016,311,1043"/>
 <area shape="poly" id="edge27_Node000001_Node000023" title=" " alt="" coords="34,530,36,624,45,766,54,841,66,909,83,965,105,1002,107,1004,103,1008,101,1006,78,967,61,910,49,841,40,767,31,624,29,530"/>
