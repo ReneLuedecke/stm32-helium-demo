@@ -1,0 +1,14 @@
+digraph "Error_Handler"
+{
+ // LATEX_PDF_SIZE
+  bgcolor="transparent";
+  edge [fontname=Helvetica,fontsize=10,labelfontname=Helvetica,labelfontsize=10];
+  node [fontname=Helvetica,fontsize=10,shape=box,height=0.2,width=0.4];
+  rankdir="RL";
+  Node1 [id="Node000001",label="Error_Handler",height=0.2,width=0.4,color="gray40", fillcolor="grey60", style="filled", fontcolor="black",tooltip="This function is executed in case of error occurrence."];
+  Node1 -> Node2 [id="edge1_Node000001_Node000002",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node2 [id="Node000002",label="main",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$main_8c.html#a840291bc02cba5474a4cb46a9b9566fe",tooltip="Hauptprogramm-Einstiegspunkt."];
+  Node1 -> Node3 [id="edge2_Node000001_Node000003",dir="back",color="steelblue1",style="solid",tooltip=" "];
+  Node3 [id="Node000003",label="SystemClock_Config",height=0.2,width=0.4,color="grey40", fillcolor="white", style="filled",URL="$main_8c.html#a70af21c671abfcc773614a9a4f63d920",tooltip="Initialisiert den Systemtakt (PLL, Busse, IC-Domain)."];
+  Node3 -> Node2 [id="edge3_Node000003_Node000002",dir="back",color="steelblue1",style="solid",tooltip=" "];
+}

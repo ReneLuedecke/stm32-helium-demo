@@ -1,10 +1,25 @@
 /* USER CODE BEGIN Header */
+/** 
+ * @file main.c
+ * @brief Entry-Point und Initialisierung für STM32N6 NUCLEO-Projekt.
+ * @details
+ *  - Takt-/Cache-Init, GPIO/USART/XSPI Setup
+ *  - Temperatur-LUT-Erzeugung (linear/Planck)
+ *  - Zeilenweise Thermal-Pipeline (Dark, Gain, Offset, LUT, BPR) – Hotpath per MVE/Helium
+ *  - Timing/Profiling via DWT, Frame-Loop via TIM-IRQ (VSYNC ~50 Hz)
+ *
+ * @note Diese Datei wurde automatisch mit Doxygen-Kommentaren angereichert.
+ *       Bitte die Beschreibungen bei Bedarf konkretisieren.
+ */
+
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  */
+ * @defgroup thermal_pipeline Thermal-Pipeline
+ * @brief Dark/Gain/Offset/LUT/BPR – zeilenweise Verarbeitung mit Helium/MVE.
+ * @{
+ * @}
+ */
+
+
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -413,6 +428,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 // PLANCK LUT GENERATION - NO FLOAT PRINTF!
 // ═══════════════════════════════════════════════════════════════════
 
+/**
+ * @brief Erzeugt Planck-basierte LUT (nicht aktiv in Demo).
+ * @param planck_table [uint16_t*] LUT-Zeiger
+ * @param emissivity [float] Emissionsgrad
+ * @param temp_min [float] Minimaltemperatur [°C]
+ * @param temp_max [float] Maximaltemperatur [°C]
+ * @return void
+ */
 void generate_planck_lut(
     uint16_t *planck_table,
     float wavelength_um,
@@ -597,7 +620,14 @@ float calculate_radiance_scale(
 // ═══════════════════════════════════════════════════════════════════
 // LINEAR TEMPERATURE LUT (SIMPLIFIED - WORKING!)
 // ═══════════════════════════════════════════════════════════════════
-
+/**
+ * @brief Generiert eine lineare Temperatur-LUT.
+ * @param planck_table [uint16_t*] Zeiger auf 65536-Eintrag LUT
+ * @param temp_min_c [float] Minimaltemperatur [°C]
+ * @param temp_max_c [float] Maximaltemperatur [°C]
+ * @param flag_temp_c [float] Referenztemperatur [°C]
+ * @return void
+ */
 void generate_linear_temp_lut(
     uint16_t *planck_table,
     float temp_min_c,
@@ -788,7 +818,18 @@ static inline void DWT_CycleCounter_Init(void)
     DWT->CYCCNT = 0;
     DWT->CTRL  |= DWT_CTRL_CYCCNTENA_Msk;
 }
-
+/**
+ * @brief Verarbeitet eine Zeile der Thermal-Daten (Helium-optimiert).
+ * @param sensor_data [uint16_t*] ADC-Rohdaten
+ * @param dark [uint16_t*] Dark-Frame
+ * @param gain [uint16_t*] Gain-Q15
+ * @param offset [uint16_t*] Offset-Werte
+ * @param planck_lut [uint16_t*] Temperatur-LUT
+ * @param output [uint16_t*] Ausgabepuffer
+ * @param width [uint32_t] Pixelbreite
+ * @return void
+ * @note Nutzt vqrdmulhq_s16 + Gather-Load; 16-Byte alignment empfohlen.
+ */
 static inline void process_thermal_line_fastest(
     const uint16_t * __restrict__ sensor_data,
     const uint16_t * __restrict__ dark,
@@ -828,7 +869,10 @@ static inline void process_thermal_line_fastest(
         vst1q_u16(&output[x], out);
     }
 }
-
+/**
+ * @brief Startet eine neue Dunkelbild-Kalibrierung.
+ * @return void
+ */
 void start_dark_frame_calibration(void) {
     printf("\n");
     printf("Parameters:\n");
@@ -937,7 +981,8 @@ uint8_t process_calibration_frame(const uint16_t sensor_frame[VPIX][HPIX]) {
 }
 
 /**
- * @brief Check if calibration is in progress
+ * @brief Prüft, ob eine Kalibrierung aktiv ist.
+ * @retval true wenn Kalibrierung läuft, sonst false
  */
 uint8_t is_calibrating(void) {
     return (calib_state != CALIB_IDLE && calib_state != CALIB_COMPLETE);
@@ -1239,6 +1284,13 @@ void build_bad_pixel_patches(void)
     }
     printf("BPR: %lu valid patches\n", (unsigned long)g_num_patches);
 }
+/**
+ * @brief Anwenden der Bad-Pixel-Patches (zweiphasig).
+ * @param frame [uint16_t*] Frame-Daten
+ * @param count [uint32_t] Anzahl der Patches
+ * @return void
+ * @note Vermeidet Read-after-Write-Artefakte.
+ */
 static inline void apply_bad_pixel_patches(uint16_t * __restrict__ frame, uint32_t count)
 {
     for (uint32_t i = 0; i < count; ++i)
@@ -1247,7 +1299,13 @@ static inline void apply_bad_pixel_patches(uint16_t * __restrict__ frame, uint32
     for (uint32_t i = 0; i < count; ++i)
         frame[g_patches[i].dst] = g_patch_values[i];
 }
-// Simple version (same-line only):
+/**
+ * @brief Korrigiert fehlerhafte Pixel (einfache Variante).
+ * @param frame [uint16_t*] Eingabeframe
+ * @param width [uint32_t] Breite
+ * @param height [uint32_t] Höhe
+ * @return void
+ */
 static inline void correct_bad_pixels_simple(uint16_t frame[VPIX][HPIX]) {
     for (uint16_t i = 0; i < total_bad_pixels; i++) {
         // Find line
@@ -1270,6 +1328,11 @@ static inline void correct_bad_pixels_simple(uint16_t frame[VPIX][HPIX]) {
         }
     }
 }
+/**
+ * @brief Hauptprogramm-Einstiegspunkt.
+ * @return int (sollte nie erreicht werden)
+ * @note Führt Initialisierung und Hauptschleife aus.
+ */
 int main(void)
 {
 
@@ -1514,9 +1577,10 @@ int main(void)
 /* USER CODE END CLK 1 */
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+ * @brief Initialisiert den Systemtakt (PLL, Busse, IC-Domain).
+ * @note Angepasst für 600 MHz Ziel-Frequenz.
+ * @return void
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -1656,10 +1720,9 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
-  * @brief XSPI2 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief Initialisiert XSPI2 (Octal DTR MemoryMapped Mode).
+ * @note Aktiviert MPU-Region WB/WA, 256MB @0x7000_0000.
+ */
 static void MX_XSPI2_Init(void)
 {
 
@@ -1707,10 +1770,9 @@ static void MX_XSPI2_Init(void)
 }
 
 /**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief Initialisiert GPIOs (LEDs, Debugpins).
+ * @return void
+ */
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
