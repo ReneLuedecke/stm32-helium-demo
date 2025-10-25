@@ -126,14 +126,22 @@ volatile uint32_t frames_processed = 0;
 volatile uint8_t frame_ready = 0;
 
 // XSPI Calibration Data Pointers (Memory-Mapped)
-#define XSPI_BASE          0x70000000
-#define XSPI_DARK_OFFSET   0x000000
-#define XSPI_GAIN_OFFSET   0x096000
-#define XSPI_OFFSET_OFFSET 0x12C000
+// Memory Map:
+//   0x000000 - 0x095FFF: Dark frame      (600 KB)
+//   0x096000 - 0x12BFFF: Gain frame      (600 KB)
+//   0x12C000 - 0x1C1FFF: Offset frame    (600 KB)
+//   0x1C2000 - 0x257FFF: Emissivity frame (600 KB) [NEW]
+//   0x258000+          : Available for future calibration data
+#define XSPI_BASE              0x70000000
+#define XSPI_DARK_OFFSET       0x000000
+#define XSPI_GAIN_OFFSET       0x096000
+#define XSPI_OFFSET_OFFSET     0x12C000
+#define XSPI_EMISSIVITY_OFFSET 0x1C2000  // 640×480×2 = 600 KB
 
-volatile uint16_t (*xspi_dark)[HPIX]   = (void*)(XSPI_BASE + XSPI_DARK_OFFSET);
-volatile uint16_t (*xspi_gain)[HPIX]   = (void*)(XSPI_BASE + XSPI_GAIN_OFFSET);
-volatile uint16_t (*xspi_offset)[HPIX] = (void*)(XSPI_BASE + XSPI_OFFSET_OFFSET);
+volatile uint16_t (*xspi_dark)[HPIX]       = (void*)(XSPI_BASE + XSPI_DARK_OFFSET);
+volatile uint16_t (*xspi_gain)[HPIX]       = (void*)(XSPI_BASE + XSPI_GAIN_OFFSET);
+volatile uint16_t (*xspi_offset)[HPIX]     = (void*)(XSPI_BASE + XSPI_OFFSET_OFFSET);
+volatile uint16_t (*xspi_emissivity)[HPIX] = (void*)(XSPI_BASE + XSPI_EMISSIVITY_OFFSET);
 
 // Calibration state machine
 typedef enum {
@@ -249,6 +257,7 @@ static inline uint16_t q15_mul_scalar_u16(uint16_t a_q15, uint16_t b_q15);
 
 // Calibration
 void generate_dummy_gain_frame(uint16_t gain[VPIX][HPIX]);
+void generate_dummy_emissivity_frame(uint16_t emissivity[VPIX][HPIX]);
 void init_gain_frame(void);
 void start_dark_frame_calibration(void);
 uint8_t process_calibration_frame(const uint16_t sensor_frame[VPIX][HPIX]);
@@ -257,6 +266,7 @@ static void XSPI_WriteEnable(XSPI_HandleTypeDef *hxspi);
 static void XSPI_AutoPollingMemReady(XSPI_HandleTypeDef *hxspi);
 static void XSPI_NOR_OctalDTRModeCfg(XSPI_HandleTypeDef *hxspi);
 static HAL_StatusTypeDef XSPI_WriteGainFrame(const uint16_t *gain_frame, uint32_t flash_offset);
+static HAL_StatusTypeDef XSPI_WriteEmissivityFrame(const uint16_t *emissivity_frame, uint32_t flash_offset);
 static HAL_StatusTypeDef XSPI_EraseSector(uint32_t address);
 static HAL_StatusTypeDef XSPI_ProgramPage(uint32_t address, const uint8_t *data, uint32_t size);
 
@@ -267,6 +277,7 @@ static inline void process_thermal_line_fastest(
     const uint16_t * __restrict__ dark,
     const uint16_t * __restrict__ gain,
     const uint16_t * __restrict__ offset,
+    const uint16_t * __restrict__ emissivity,
     const uint16_t * __restrict__ planck_lut,
     uint16_t * __restrict__ output,
     uint32_t width);
@@ -730,6 +741,46 @@ void init_gain_frame(void) {
     printf("✓ Gain frame initialized\n");
 }
 
+/**
+ * @brief Generate dummy emissivity frame for thermal imaging
+ * @param emissivity Output emissivity frame [VPIX][HPIX] in Q15 format
+ *
+ * Generates per-pixel emissivity values in Q15 fixed-point format.
+ * - 0x0000 = 0.0 (perfect reflector)
+ * - 0x8000 = 1.0 (perfect blackbody, 100% emissivity)
+ * - 0x7FFF ≈ 0.999969 (maximum positive Q15)
+ *
+ * Default: Unity emissivity (0x8000) representing ideal blackbody behavior.
+ * Optional material variations can be added (e.g., metals ~0.3, plastics ~0.95).
+ */
+void generate_dummy_emissivity_frame(uint16_t emissivity[VPIX][HPIX]) {
+    printf("Generating dummy emissivity frame (Q15)...\n");
+
+    // Default: Unity emissivity (100% = perfect blackbody)
+    const float BASE_EMISSIVITY = 1.0f;
+
+    for (uint32_t y = 0; y < VPIX; y++) {
+        for (uint32_t x = 0; x < HPIX; x++) {
+            // Unity emissivity for all pixels (0x8000 in Q15)
+            emissivity[y][x] = q15_from_float(BASE_EMISSIVITY);
+
+            // Optional: Add material-based spatial variation
+            // Example zones for different materials:
+            // if (x < HPIX/3) {
+            //     emissivity[y][x] = q15_from_float(0.3f);  // Metal zone
+            // } else if (x < 2*HPIX/3) {
+            //     emissivity[y][x] = q15_from_float(0.95f); // Plastic zone
+            // } else {
+            //     emissivity[y][x] = q15_from_float(1.0f);  // Blackbody zone
+            // }
+        }
+    }
+
+    printf("  ✓ Emissivity frame generated (unity: 0x%04X = %.3f)\n",
+           emissivity[VPIX/2][HPIX/2],
+           (float)(int16_t)emissivity[VPIX/2][HPIX/2] / 32768.0f);
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // DARK FRAME CALIBRATION
 // ═══════════════════════════════════════════════════════════════════
@@ -854,6 +905,7 @@ static inline void process_thermal_line_fastest(
     const uint16_t * __restrict__ dark,
     const uint16_t * __restrict__ gain,
     const uint16_t * __restrict__ offset,
+    const uint16_t * __restrict__ emissivity,
     const uint16_t * __restrict__ planck_lut,
     uint16_t * __restrict__ output,
     uint32_t width)
@@ -862,29 +914,50 @@ static inline void process_thermal_line_fastest(
 
     for (uint32_t x = 0; x < width; x += 8)
     {
-        // Load
+        // ═══════════════════════════════════════════════════════════
+        // Load input data (8 pixels at once)
+        // ═══════════════════════════════════════════════════════════
         uint16x8_t adc   = vld1q_u16(&sensor_data[x]);
         uint16x8_t darkv = vld1q_u16(&dark[x]);
         uint16x8_t gainv = vld1q_u16(&gain[x]);
         uint16x8_t offv  = vld1q_u16(&offset[x]);
+        uint16x8_t emiss = vld1q_u16(&emissivity[x]);
 
-        // Dark subtract
-        uint16x8_t corr  = vqsubq_u16(adc, darkv);
+        // ═══════════════════════════════════════════════════════════
+        // Dark frame correction
+        // ═══════════════════════════════════════════════════════════
+        uint16x8_t corr = vqsubq_u16(adc, darkv);
 
-        // Gain Q15
+        // ═══════════════════════════════════════════════════════════
+        // Gain correction (Q15 signed multiply)
+        // ═══════════════════════════════════════════════════════════
         int16x8_t  corr_s = vreinterpretq_s16_u16(corr);
         int16x8_t  gain_s = vreinterpretq_s16_u16(gainv);
         int16x8_t  mul_s  = vqrdmulhq_s16(corr_s, gain_s);
         uint16x8_t val    = vreinterpretq_u16_s16(mul_s);
 
-        // Add flag + offset
+        // ═══════════════════════════════════════════════════════════
+        // Emissivity correction (Q15 signed multiply for unsigned data)
+        // ═══════════════════════════════════════════════════════════
+        int16x8_t val_s   = vreinterpretq_s16_u16(val);
+        int16x8_t emiss_s = vreinterpretq_s16_u16(emiss);
+        int16x8_t emiss_mul = vqrdmulhq_s16(val_s, emiss_s);
+        val = vreinterpretq_u16_s16(emiss_mul);
+
+        // ═══════════════════════════════════════════════════════════
+        // Add flag reference + offset
+        // ═══════════════════════════════════════════════════════════
         val = vqaddq_u16(val, flag_vec);
         val = vqaddq_u16(val, offv);
 
-        // LUT
+        // ═══════════════════════════════════════════════════════════
+        // Planck LUT lookup
+        // ═══════════════════════════════════════════════════════════
         uint16x8_t out = vldrhq_gather_shifted_offset_u16(planck_lut, val);
 
-        // Store
+        // ═══════════════════════════════════════════════════════════
+        // Store result
+        // ═══════════════════════════════════════════════════════════
         vst1q_u16(&output[x], out);
     }
 }
@@ -1205,6 +1278,34 @@ void load_bad_pixel_map(void) {
                gain_frame[240][320],
                (float)(int16_t)gain_frame[240][320] / 32768.0f);
 
+        // ═══════════════════════════════════════════════════════════════
+        // Generate and Write Emissivity Frame to XSPI
+        // ═══════════════════════════════════════════════════════════════
+        printf("\n");
+        generate_dummy_emissivity_frame(gain_frame);  // Reuse gain_frame buffer
+
+        if (XSPI_WriteEmissivityFrame(&gain_frame[0][0], XSPI_EMISSIVITY_OFFSET) != HAL_OK) {
+            printf("✗ Failed to write emissivity frame!\n");
+            Error_Handler();
+        }
+
+        printf("\nEmissivity frame verification from XSPI...\n");
+        printf("  Memory-mapped address: 0x%08lX\n", (uint32_t)(XSPI_BASE + XSPI_EMISSIVITY_OFFSET));
+        printf("  Sample value [240][320]: 0x%04X (%.3f emissivity)\n",
+               xspi_emissivity[240][320],
+               (float)xspi_emissivity[240][320] / 32768.0f);
+
+        // ═══════════════════════════════════════════════════════════════
+        // Restore gain frame from XSPI (we reused the buffer)
+        // ═══════════════════════════════════════════════════════════════
+        printf("\nRestoring gain frame to AXISRAM1...\n");
+        for (uint32_t y = 0; y < VPIX; y++) {
+            for (uint32_t x = 0; x < HPIX; x++) {
+                gain_frame[y][x] = xspi_gain[y][x];
+            }
+        }
+        printf("  ✓ Gain frame restored\n");
+
         // Rest of initialization...
         printf("\nInitializing thermal pipeline...\n");
         DWT_CycleCounter_Init();
@@ -1308,8 +1409,9 @@ void load_bad_pixel_map(void) {
                 process_thermal_line_fastest(
                     frame_buffer_A[line],
                     dark_frame[line],
-                    gain_frame[line],       // From XSPI!
+                    gain_frame[line],           // From AXISRAM1
                     offset_line,
+					(const uint16_t *)xspi_emissivity[line],
                     planck_table,
                     frame_buffer_B[line],
                     HPIX
@@ -1958,6 +2060,187 @@ void load_bad_pixel_map(void) {
 
         return HAL_OK;
     }
+
+    /**
+     * @brief Write emissivity frame to XSPI NOR Flash
+     * @param emissivity_frame Pointer to emissivity data [VPIX][HPIX] in Q15 format
+     * @param flash_offset Flash offset address (e.g., XSPI_EMISSIVITY_OFFSET)
+     * @return HAL status
+     *
+     * Writes 640×480×2 = 600 KB emissivity calibration data to external flash.
+     * Automatically handles:
+     * - Memory-mapped mode exit/re-entry
+     * - Block erase (64 KB blocks)
+     * - Page programming (256 byte pages)
+     * - Performance measurement
+     */
+    HAL_StatusTypeDef XSPI_WriteEmissivityFrame(const uint16_t *emissivity_frame, uint32_t flash_offset)
+    {
+        const uint32_t EMISSIVITY_FRAME_SIZE = 640 * 480 * 2;  // 614,400 bytes
+        const uint32_t BLOCK_SIZE = 64 * 1024;                  // 64 KB
+        const uint32_t PAGE_SIZE = 256;                         // 256 bytes
+
+        printf("\n");
+        printf("╔═══════════════════════════════════════════════════════════╗\n");
+        printf("║  Writing Emissivity Frame to XSPI Flash                  ║\n");
+        printf("╚═══════════════════════════════════════════════════════════╝\n");
+        printf("\n");
+
+        printf("Target address: 0x%08lX\n", flash_offset);
+        printf("Size:           %lu bytes (%lu KB)\n", EMISSIVITY_FRAME_SIZE, EMISSIVITY_FRAME_SIZE / 1024);
+
+        // ═══════════════════════════════════════════════════════════════
+        // 1. Exit Memory-Mapped Mode
+        // ═══════════════════════════════════════════════════════════════
+        printf("\n[1/4] Exiting memory-mapped mode...\n");
+
+        if (HAL_XSPI_Abort(&hxspi2) != HAL_OK) {
+            printf("  ✗ Failed to exit memory-mapped mode!\n");
+            return HAL_ERROR;
+        }
+
+        printf("  ✓ Memory-mapped mode disabled\n");
+
+        // ═══════════════════════════════════════════════════════════════
+        // 2. Erase Required Blocks (64KB each)
+        // ═══════════════════════════════════════════════════════════════
+        uint32_t num_blocks = (EMISSIVITY_FRAME_SIZE + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+        printf("\n[2/4] Erasing %lu blocks (64KB each)...\n", num_blocks);
+
+        uint32_t erase_start = DWT->CYCCNT;
+
+        for (uint32_t i = 0; i < num_blocks; i++) {
+            uint32_t block_addr = flash_offset + (i * BLOCK_SIZE);
+
+            printf("  Erasing block %lu/%lu @ 0x%08lX...\n", i + 1, num_blocks, block_addr);
+            fflush(stdout);
+
+            if (XSPI_EraseSector(block_addr) != HAL_OK) {
+                printf("\n  ✗ Erase failed at block %lu!\n", i);
+                return HAL_ERROR;
+            }
+        }
+
+        uint32_t erase_cycles = DWT->CYCCNT - erase_start;
+        printf("\n  ✓ Erase complete (%lu ms)\n", erase_cycles / 600000);
+
+        // ═══════════════════════════════════════════════════════════════
+        // 3. Program Data (256 bytes per page)
+        // ═══════════════════════════════════════════════════════════════
+        const uint8_t *src = (const uint8_t *)emissivity_frame;
+        uint32_t num_pages = (EMISSIVITY_FRAME_SIZE + PAGE_SIZE - 1) / PAGE_SIZE;
+
+        printf("\n[3/4] Programming %lu pages (256 bytes each)...\n", num_pages);
+
+        uint32_t prog_start = DWT->CYCCNT;
+
+        for (uint32_t i = 0; i < num_pages; i++) {
+            uint32_t page_addr = flash_offset + (i * PAGE_SIZE);
+            uint32_t page_size = PAGE_SIZE;
+
+            // Last page might be smaller
+            if (i == num_pages - 1) {
+                uint32_t remainder = EMISSIVITY_FRAME_SIZE % PAGE_SIZE;
+                if (remainder != 0) {
+                    page_size = remainder;
+                }
+            }
+
+            // Progress indicator every 100 pages
+            if (i % 100 == 0 || i == num_pages - 1) {
+                uint32_t percent = (i * 100) / num_pages;
+                printf("  Programming: %lu%% (%lu/%lu pages)...\n",
+                       percent, i + 1, num_pages);
+                fflush(stdout);
+            }
+
+            if (XSPI_ProgramPage(page_addr, &src[i * PAGE_SIZE], page_size) != HAL_OK) {
+                printf("\n  ✗ Program failed at page %lu (addr: 0x%08lX)!\n",
+                       i, page_addr);
+                return HAL_ERROR;
+            }
+        }
+
+        uint32_t prog_cycles = DWT->CYCCNT - prog_start;
+        uint32_t prog_us = prog_cycles / 600;
+        uint32_t speed_kbps = (EMISSIVITY_FRAME_SIZE * 1000) / prog_us;  // KB/s
+
+        printf("\n  ✓ Programming complete\n");
+        printf("    Time: %lu ms\n", prog_cycles / 600000);
+        printf("    Speed: %lu KB/s\n", speed_kbps);
+
+        // ═══════════════════════════════════════════════════════════════
+        // 4. Re-enter Memory-Mapped Mode
+        // ═══════════════════════════════════════════════════════════════
+        printf("\n[4/4] Re-entering memory-mapped mode...\n");
+
+        // READ configuration
+        XSPI_RegularCmdTypeDef sRead = {0};
+        sRead.OperationType        = HAL_XSPI_OPTYPE_READ_CFG;
+        sRead.Instruction          = OCTAL_IO_DTR_READ_CMD;
+        sRead.InstructionMode      = HAL_XSPI_INSTRUCTION_8_LINES;
+        sRead.InstructionWidth     = HAL_XSPI_INSTRUCTION_16_BITS;
+        sRead.InstructionDTRMode   = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+        sRead.AddressMode          = HAL_XSPI_ADDRESS_8_LINES;
+        sRead.AddressWidth         = HAL_XSPI_ADDRESS_32_BITS;
+        sRead.AddressDTRMode       = HAL_XSPI_ADDRESS_DTR_ENABLE;
+        sRead.DataMode             = HAL_XSPI_DATA_8_LINES;
+        sRead.DataDTRMode          = HAL_XSPI_DATA_DTR_ENABLE;
+        sRead.DummyCycles          = DUMMY_CLOCK_CYCLES_READ_OCTAL;
+        sRead.DQSMode              = HAL_XSPI_DQS_ENABLE;
+        sRead.AlternateBytesMode   = HAL_XSPI_ALT_BYTES_NONE;
+
+        if (HAL_XSPI_Command(&hxspi2, &sRead, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+            printf("  ✗ READ-CFG failed\n");
+            return HAL_ERROR;
+        }
+
+        // WRITE configuration
+        XSPI_RegularCmdTypeDef sWrite = {0};
+        sWrite.OperationType       = HAL_XSPI_OPTYPE_WRITE_CFG;
+        sWrite.Instruction         = OCTAL_PAGE_PROG_CMD;
+        sWrite.InstructionMode     = HAL_XSPI_INSTRUCTION_8_LINES;
+        sWrite.InstructionWidth    = HAL_XSPI_INSTRUCTION_16_BITS;
+        sWrite.InstructionDTRMode  = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+        sWrite.AddressMode         = HAL_XSPI_ADDRESS_8_LINES;
+        sWrite.AddressWidth        = HAL_XSPI_ADDRESS_32_BITS;
+        sWrite.AddressDTRMode      = HAL_XSPI_ADDRESS_DTR_ENABLE;
+        sWrite.DataMode            = HAL_XSPI_DATA_8_LINES;
+        sWrite.DataDTRMode         = HAL_XSPI_DATA_DTR_ENABLE;
+        sWrite.DummyCycles         = 0;
+        sWrite.DQSMode             = HAL_XSPI_DQS_DISABLE;
+        sWrite.AlternateBytesMode  = HAL_XSPI_ALT_BYTES_NONE;
+
+        if (HAL_XSPI_Command(&hxspi2, &sWrite, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+            printf("  ✗ Write-CFG failed\n");
+            return HAL_ERROR;
+        }
+
+        // Enter Memory-Mapped mode
+        XSPI_MemoryMappedTypeDef sMMAP = {0};
+        sMMAP.TimeOutActivation  = HAL_XSPI_TIMEOUT_COUNTER_ENABLE;
+        sMMAP.TimeoutPeriodClock = 0x50;
+
+        if (HAL_XSPI_MemoryMapped(&hxspi2, &sMMAP) != HAL_OK) {
+            printf("  ✗ Memory-Mapped re-entry failed\n");
+            return HAL_ERROR;
+        }
+
+        printf("  ✓ Memory-mapped mode enabled\n");
+
+        // ═══════════════════════════════════════════════════════════════
+        // Success!
+        // ═══════════════════════════════════════════════════════════════
+        printf("\n");
+        printf("╔═══════════════════════════════════════════════════════════╗\n");
+        printf("║  ✓ Emissivity Frame written successfully!                ║\n");
+        printf("╚═══════════════════════════════════════════════════════════╝\n");
+        printf("\n");
+
+        return HAL_OK;
+    }
+
     static HAL_StatusTypeDef XSPI_EraseSector(uint32_t address)
     {
         XSPI_RegularCmdTypeDef sCommand = {0};
