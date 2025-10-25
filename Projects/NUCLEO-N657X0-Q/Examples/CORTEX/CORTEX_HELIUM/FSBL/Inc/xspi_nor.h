@@ -83,4 +83,70 @@ int32_t XSPI_NOR_ReadID(uint8_t *Id);
  */
 int32_t XSPI_NOR_ConfigFlash(BSP_XSPI_NOR_Interface_t Mode, BSP_XSPI_NOR_Transfer_t Rate);
 
+// ═══════════════════════════════════════════════════════════════════
+// CALIBRATION DATA WRITE/READ (HIGH-LEVEL)
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Write gain calibration frame to XSPI Flash
+ *
+ * This function:
+ * 1. Exits memory-mapped mode
+ * 2. Erases required 64KB blocks
+ * 3. Programs data page-by-page (256 bytes)
+ * 4. Re-enters memory-mapped mode
+ *
+ * @param gain_frame Pointer to 640×480 uint16_t gain frame (614 KB)
+ * @param flash_offset Flash offset (should be 64KB aligned)
+ * @return HAL_OK on success, HAL_ERROR on failure
+ */
+HAL_StatusTypeDef XSPI_NOR_WriteGainFrame(const uint16_t *gain_frame,
+                                          uint32_t flash_offset);
+
+/**
+ * @brief Read gain calibration frame from XSPI Flash
+ *
+ * Reads gain frame from flash to RAM buffer.
+ * Note: In memory-mapped mode, you can also just read directly
+ * from the memory-mapped address!
+ *
+ * @param gain_frame Pointer to destination buffer (640×480 uint16_t)
+ * @param flash_offset Flash offset
+ * @return HAL_OK on success, HAL_ERROR on failure
+ */
+HAL_StatusTypeDef XSPI_NOR_ReadGainFrame(uint16_t *gain_frame,
+                                         uint32_t flash_offset);
+
+/**
+ * @brief Write generic calibration data to XSPI Flash
+ *
+ * Generic function for writing any calibration data (dark, gain, offset)
+ *
+ * @param data Pointer to source data
+ * @param flash_offset Flash offset (should be 64KB aligned for best performance)
+ * @param size_bytes Size in bytes
+ * @param name Debug name for printf
+ * @return HAL_OK on success, HAL_ERROR on failure
+ */
+HAL_StatusTypeDef XSPI_NOR_WriteCalibration(const uint16_t *data,
+                                             uint32_t flash_offset,
+                                             uint32_t size_bytes,
+                                             const char *name);
+
+/**
+ * @brief Verify written calibration data
+ *
+ * Reads back data and compares with expected values
+ *
+ * @param expected Pointer to expected data
+ * @param flash_offset Flash offset
+ * @param size_bytes Size in bytes
+ * @param name Debug name for printf
+ * @return HAL_OK if verification passed, HAL_ERROR on mismatch
+ */
+HAL_StatusTypeDef XSPI_NOR_VerifyCalibration(const uint16_t *expected,
+                                              uint32_t flash_offset,
+                                              uint32_t size_bytes,
+                                              const char *name);
+
 #endif /* XSPI_NOR_H */
