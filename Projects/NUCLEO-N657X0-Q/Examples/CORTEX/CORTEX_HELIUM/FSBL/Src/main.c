@@ -372,6 +372,12 @@ void ROI_CalculateStatistics_Helium(
     ROI_Result_t *roi_results,
     uint8_t num_rois
 );
+// Header/Prototyp (vor der ersten Verwendung)
+void ROI_Calc_TempCenti_MVE(
+    const int16_t temp[][HPIX],   // <-- NICHT [VPIX][HPIX], sondern [] [HPIX]
+    const ROI_Config_t *cfg_in,
+    ROI_Result_t *res_out,
+    uint8_t num_rois);
 
 /**
  * @brief Convert encoded ROI results to Celsius
@@ -1508,14 +1514,17 @@ void load_bad_pixel_map(void) {
         	if (roi_frame_counter % ROI_UPDATE_DIVIDER == 0) {
         	    uint32_t roi_start = DWT->CYCCNT;
 
-        	    ROI_CalculateStatistics_Helium(
-        	        frame_buffer_B,
-        	        (const ROI_Config_t *)roi_configs,  // ← Explicit cast
-        	        (ROI_Result_t *)roi_results,        // ← Explicit cast
-        	        MAX_ROIS
-        	    );
+//        	    ROI_CalculateStatistics_Helium(
+//        	        frame_buffer_B,
+//        	        (const ROI_Config_t *)roi_configs,  // ← Explicit cast
+//        	        (ROI_Result_t *)roi_results,        // ← Explicit cast
+//        	        MAX_ROIS
+//        	    );
 
-        	    ROI_ConvertToCelsius(roi_results, roi_stats_celsius, MAX_ROIS);
+
+        	    ROI_Calc_TempCenti_MVE(frame_buffer_B, roi_configs, roi_results, MAX_ROIS);
+
+        	   // ROI_ConvertToCelsius(roi_results, roi_stats_celsius, MAX_ROIS);
 
         	    roi_cycles = DWT->CYCCNT - roi_start;
         	}
@@ -1543,9 +1552,28 @@ void load_bad_pixel_map(void) {
                    printf("Total:       %7lu cycles (%3lu ms) = %lu Hz\n",
                           total_cycles, total_cycles/600000, 600000000/total_cycles);
                    printf("CS: %lu | BP: %lu\n\n", checksum, (unsigned long)g_num_patches);
-                   if (roi_cycles > 0) {
-                           ROI_PrintStatistics(roi_stats_celsius, MAX_ROIS);
+
+                   // Nach der ROI-Berechnung (siehe Punkt 2) …
+                   printf("\nROI  Pixels     Min(°C)  Max(°C)  Mean(°C)\n");
+                   for (uint8_t i = 0; i < MAX_ROIS; ++i) {
+                       if (!roi_configs[i].active || roi_results[i].count == 0) {
+                           printf(" %2u  Inactive\n", i);
+                           continue;
                        }
+
+                       // Werte liegen als int16_t in 1/100 °C vor, sind aber in u16-Feldern gespeichert → bitgleich zurückcasten:
+                       int16_t tmin  = (int16_t)roi_results[i].min;   // 1/100 °C
+                       int16_t tmax  = (int16_t)roi_results[i].max;   // 1/100 °C
+                       int16_t tmean = (int16_t)roi_results[i].mean;  // 1/100 °C
+
+                       printf(" %2u  %7u   %7.2f   %7.2f   %7.2f\n",
+                              i,
+                              (unsigned)roi_results[i].count,
+                              tmin  / 100.0f,
+                              tmax  / 100.0f,
+                              tmean / 100.0f);
+                   }
+                   printf("\n");
                    count = 0;
                 // Optional: Trigger calibration every 100 frames
                 // start_dark_frame_calibration();
@@ -2863,6 +2891,97 @@ void load_bad_pixel_map(void) {
         }
     }
 
+
+// ROI auf Temperatur-Buffer (int16: 1/100 °C) berechnen
+    __attribute__((noinline))
+    void ROI_Calc_TempCenti_MVE(
+        const int16_t temp[][HPIX],   // 1/100 °C
+        const ROI_Config_t *cfg_in,
+        ROI_Result_t *res_out,
+        uint8_t num_rois)
+    {
+        if (!cfg_in || !res_out) return;
+
+        for (uint8_t r = 0; r < num_rois; ++r) {
+            res_out[r].min   = 0xFFFF;
+            res_out[r].max   = 0x0000;
+            res_out[r].sum   = 0;
+            res_out[r].count = 0;
+            res_out[r].mean  = 0;
+        }
+
+        for (uint8_t roi = 0; roi < num_rois; ++roi) {
+            const ROI_Config_t *c = &cfg_in[roi];
+            if (!c->active) continue;
+
+            uint16_t xs = (c->x_start < HPIX) ? c->x_start : (HPIX - 1);
+            uint16_t ys = (c->y_start < VPIX) ? c->y_start : (VPIX - 1);
+            uint16_t xe = (c->x_end   < HPIX) ? c->x_end   : (HPIX - 1);
+            uint16_t ye = (c->y_end   < VPIX) ? c->y_end   : (VPIX - 1);
+            if (xe < xs || ye < ys) {
+                res_out[roi].min = res_out[roi].max =
+                res_out[roi].sum = res_out[roi].count =
+                res_out[roi].mean = 0;
+                continue;
+            }
+
+            int16_t  run_min =  32767;
+            int16_t  run_max = -32768;
+            int64_t  run_sum = 0;
+            uint32_t cnt     = 0;
+
+            int16x8_t vmin_all  = vdupq_n_s16( 32767);
+            int16x8_t vmax_all  = vdupq_n_s16(-32768);
+            int32x4_t vsum0_all = vdupq_n_s32(0);
+            int32x4_t vsum1_all = vdupq_n_s32(0);
+
+            for (uint16_t y = ys; y <= ye; ++y) {
+                const int16_t *line = &temp[y][0];
+                uint16_t x = xs;
+                uint16_t w = (uint16_t)(xe - xs + 1);
+
+                uint16_t n8 = w >> 3;
+                for (uint16_t i = 0; i < n8; ++i, x += 8) {
+                    int16x8_t v = vld1q_s16(&line[x]);
+                    vmin_all  = vminq_s16(vmin_all, v);
+                    vmax_all  = vmaxq_s16(vmax_all, v);
+                    vsum0_all = vaddq_s32(vsum0_all, vmovlbq_s16(v));
+                    vsum1_all = vaddq_s32(vsum1_all, vmovltq_s16(v));
+                    cnt += 8;
+                }
+
+                uint16_t rem = (uint16_t)(w & 7);
+                for (uint16_t i = 0; i < rem; ++i) {
+                    int16_t val = line[x + i];
+                    if (val < run_min) run_min = val;
+                    if (val > run_max) run_max = val;
+                    run_sum += val;
+                    cnt++;
+                }
+            }
+
+            int16_t min8[8], max8[8];
+            vst1q_s16(min8, vmin_all);
+            vst1q_s16(max8, vmax_all);
+            for (int i = 0; i < 8; ++i) {
+                if (min8[i] < run_min) run_min = min8[i];
+                if (max8[i] > run_max) run_max = max8[i];
+            }
+
+            int32_t s0[4], s1[4];
+            vst1q_s32(s0, vsum0_all);
+            vst1q_s32(s1, vsum1_all);
+            run_sum += (int64_t)s0[0] + s0[1] + s0[2] + s0[3]
+                     + (int64_t)s1[0] + s1[1] + s1[2] + s1[3];
+
+            res_out[roi].min   = (uint16_t)run_min;
+            res_out[roi].max   = (uint16_t)run_max;
+            res_out[roi].count = cnt;
+            int16_t mean_s16   = (cnt ? (int16_t)(run_sum / (int64_t)cnt) : 0);
+            res_out[roi].mean  = (uint16_t)mean_s16;
+            res_out[roi].sum   = 0; // optional ungenutzt lassen
+        }
+    }
     /**
      * @brief Print ROI statistics to console
      */
