@@ -22,7 +22,21 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+/**
+ * @brief ROI Configuration
+ * Defines rectangular region of interest in the frame
+ */
 
+
+/**
+ * @brief ROI Statistics in readable format (Celsius)
+ */
+typedef struct {
+    float min_temp_c;      ///< Minimum temperature (°C)
+    float max_temp_c;      ///< Maximum temperature (°C)
+    float mean_temp_c;     ///< Mean temperature (°C)
+    uint32_t pixel_count;  ///< Number of pixels
+} ROI_Stats_Celsius_t;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -74,6 +88,33 @@ extern TIM_HandleTypeDef htim2;
 void thermal_vsync_init(void);
 void thermal_vsync_start(void);
 void thermal_frame_process(void);
+
+#define MAX_ROIS 9                    ///< Maximum number of ROIs
+#define ROI_UPDATE_DIVIDER 1          ///< Update ROIs every N frames (1=every frame)
+// 12-Byte Config: 4x u16 + 1x u8 + 3x pad
+typedef struct {
+    uint16_t x_start, y_start;
+    uint16_t x_end,   y_end;
+    uint8_t  active;
+    uint8_t  reserved[3];   // ← WICHTIG: auf 12 B aufpolstern
+} ROI_Config_t;
+
+// 16-Byte Result: sauber 16B aligned
+typedef struct {
+    uint16_t min;
+    uint16_t max;
+    uint32_t sum;
+    uint32_t count;
+    uint16_t mean;
+    uint16_t reserved;      // ← auf 16 B auffüllen
+} ROI_Result_t;
+
+_Static_assert(sizeof(ROI_Config_t) == 12, "ROI_Config_t must be 12 bytes");
+_Static_assert(sizeof(ROI_Result_t) == 16, "ROI_Result_t must be 16 bytes");
+
+// (optional) extern-Arrays, wenn global verwendet:
+extern ROI_Config_t roi_configs[MAX_ROIS];
+extern ROI_Result_t roi_results[MAX_ROIS];
 
 /* USER CODE END PD */
 
@@ -235,6 +276,31 @@ const BadPixelFactory_t factory_bad_pixels[] = {
 const uint16_t factory_bad_pixel_count =
     sizeof(factory_bad_pixels) / sizeof(factory_bad_pixels[0]);
 
+//// ROI Configurations (9 ROIs × 12 bytes = 108 bytes)
+//__attribute__((aligned(16), section(".axisram1")))
+//ROI_Config_t roi_configs[MAX_ROIS];
+//
+//// ROI Results (9 ROIs × 16 bytes = 144 bytes)
+//__attribute__((aligned(16), section(".axisram1")))
+//ROI_Result_t roi_results[MAX_ROIS];
+//
+//// ROI Statistics (human-readable)
+//__attribute__((aligned(16), section(".axisram1")))
+//ROI_Stats_Celsius_t roi_stats_celsius[MAX_ROIS];
+
+
+// NEU – in normales .bss oder das schon genutzte .noncacheable:
+__attribute__((aligned(16)))  // oder: section(".noncacheable")
+ROI_Config_t roi_configs[MAX_ROIS];
+
+__attribute__((aligned(16)))  // oder: section(".noncacheable")
+ROI_Result_t roi_results[MAX_ROIS];
+__attribute__((aligned(16)))
+ROI_Stats_Celsius_t roi_stats_celsius[MAX_ROIS];
+// ROI Frame counter
+volatile uint32_t roi_frame_counter = 0;
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -269,6 +335,7 @@ static HAL_StatusTypeDef XSPI_WriteGainFrame(const uint16_t *gain_frame, uint32_
 static HAL_StatusTypeDef XSPI_WriteEmissivityFrame(const uint16_t *emissivity_frame, uint32_t flash_offset);
 static HAL_StatusTypeDef XSPI_EraseSector(uint32_t address);
 static HAL_StatusTypeDef XSPI_ProgramPage(uint32_t address, const uint8_t *data, uint32_t size);
+static HAL_StatusTypeDef XSPI_WriteOffsetFrame(const uint16_t *offset_frame, uint32_t flash_offset);
 
 // Processing
 static inline void DWT_CycleCounter_Init(void);
@@ -286,6 +353,45 @@ static inline void process_thermal_line_fastest(
 void load_bad_pixel_map(void);
 void build_bad_pixel_patches(void);
 static inline void apply_bad_pixel_patches(uint16_t * __restrict__ frame, uint32_t count);
+
+/**
+ * @brief Initialize ROI configurations with default values
+ */
+void ROI_Init(void);
+
+/**
+ * @brief Calculate ROI statistics using Helium optimization
+ * @param frame Temperature frame (640×480 uint16_t)
+ * @param roi_configs ROI configurations
+ * @param roi_results Output statistics (encoded values)
+ * @param num_rois Number of ROIs to process
+ */
+void ROI_CalculateStatistics_Helium(
+    const uint16_t frame[VPIX][HPIX],
+    const ROI_Config_t *roi_configs,
+    ROI_Result_t *roi_results,
+    uint8_t num_rois
+);
+
+/**
+ * @brief Convert encoded ROI results to Celsius
+ * @param roi_results Encoded ROI results
+ * @param roi_stats_celsius Output in Celsius
+ * @param num_rois Number of ROIs
+ */
+void ROI_ConvertToCelsius(
+    const ROI_Result_t *roi_results,
+    ROI_Stats_Celsius_t *roi_stats_celsius,
+    uint8_t num_rois);
+
+/**
+ * @brief Print ROI statistics to console
+ * @param roi_stats_celsius ROI statistics in Celsius
+ * @param num_rois Number of ROIs
+ */
+void ROI_PrintStatistics(
+    const ROI_Stats_Celsius_t *roi_stats_celsius,
+    uint8_t num_rois);
 
 /* USER CODE END PFP */
 
@@ -674,73 +780,6 @@ static inline uint16_t q15_mul_scalar_u16(uint16_t a_q15, uint16_t b_q15) {
     return (uint16_t)(int16_t)p;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// DUMMY CALIBRATION GENERATION
-// ═══════════════════════════════════════════════════════════════════
-
-void generate_dummy_gain_frame(uint16_t gain[VPIX][HPIX]) {
-    printf("Generating dummy gain frame (Q15)...\n");
-
-    const float BASE_GAIN = 1.0f;
-    const float NUC_VARIATION = 0.05f;  // ±5%
-
-    const float cx = (float)HPIX / 2.0f;
-    const float cy = (float)VPIX / 2.0f;
-    const float max_radius = sqrtf(cx*cx + cy*cy);
-
-    for (uint32_t y = 0; y < VPIX; y++) {
-        for (uint32_t x = 0; x < HPIX; x++) {
-            float gain_val = BASE_GAIN;
-
-            // Pixel response variation
-            uint32_t seed = (y * HPIX + x) * 1103515245 + 12345;
-            float nuc = ((float)((seed >> 16) % 1000) / 1000.0f - 0.5f) * 2.0f * NUC_VARIATION;
-            gain_val += nuc;
-
-            // Vignetting (cos^4)
-            float dx = (float)x - cx;
-            float dy = (float)y - cy;
-            float radius = sqrtf(dx*dx + dy*dy);
-            float theta = radius / max_radius;
-
-            if (theta < 1.0f) {
-                float cos_theta = sqrtf(1.0f - theta*theta);
-                float cos4 = cos_theta * cos_theta * cos_theta * cos_theta;
-                float vignetting = 0.90f + 0.10f * cos4;
-                gain_val *= vignetting;
-            }
-
-            gain[y][x] = q15_from_float(gain_val);
-        }
-    }
-
-    // Mark bad pixels
-    for (uint16_t i = 0; i < factory_bad_pixel_count; i++) {
-        uint16_t x = factory_bad_pixels[i].x;
-        uint16_t y = factory_bad_pixels[i].y;
-        if (x < HPIX && y < VPIX) {
-            gain[y][x] = 0;
-        }
-    }
-
-    printf("  ✓ Gain frame generated (center: 0x%04X = %.3f)\n",
-           gain[VPIX/2][HPIX/2],
-           (float)(int16_t)gain[VPIX/2][HPIX/2] / 32768.0f);
-}
-
-void init_gain_frame(void) {
-    printf("Initializing gain frame...\n");
-
-    for (uint32_t y = 0; y < VPIX; y++) {
-        for (uint32_t x = 0; x < HPIX; x++) {
-            gain_frame[y][x] = 0x7FFF;  // Unity gain
-        }
-    }
-
-    last_T_chip_c = T_chip_c;
-    printf("✓ Gain frame initialized\n");
-}
-
 /**
  * @brief Generate dummy emissivity frame for thermal imaging
  * @param emissivity Output emissivity frame [VPIX][HPIX] in Q15 format
@@ -780,7 +819,26 @@ void generate_dummy_emissivity_frame(uint16_t emissivity[VPIX][HPIX]) {
            emissivity[VPIX/2][HPIX/2],
            (float)(int16_t)emissivity[VPIX/2][HPIX/2] / 32768.0f);
 }
+/**
+ * @brief Generate dummy emissivity frame for thermal imaging
+ */
+void generate_dummy_offest_frame(uint16_t offset[VPIX][HPIX]) {
+    printf("Generating dummy offset frame (Q15)...\n");
 
+    // Default: Unity emissivity (100% = perfect blackbody)
+    const int BASE_Offset = 1000;
+
+    for (uint32_t y = 0; y < VPIX; y++) {
+        for (uint32_t x = 0; x < HPIX; x++) {
+            // Unity emissivity for all pixels (0x8000 in Q15)
+        	offset[y][x] = BASE_Offset;
+        }
+    }
+
+    printf("  ✓ Offset frame generated (unity: 0x%04X = %u)\n",
+    		offset[VPIX/2][HPIX/2],
+           (int16_t)offset[VPIX/2][HPIX/2]);
+}
 // ═══════════════════════════════════════════════════════════════════
 // DARK FRAME CALIBRATION
 // ═══════════════════════════════════════════════════════════════════
@@ -1127,7 +1185,20 @@ void load_bad_pixel_map(void) {
         printf("╚═══════════════════════════════════════════════════════════╝\n");
         printf("\n");
 
+        ROI_Init();
+        // Nach ROI_Init():
+        printf("\nDEBUG Memory Addresses:\n");
+        printf("  roi_configs addr:  0x%08lX\n", (uint32_t)roi_configs);
+        printf("  roi_results addr:  0x%08lX\n", (uint32_t)roi_results);
+        printf("  frame_buffer addr: 0x%08lX\n", (uint32_t)frame_buffer_B);
+        printf("\n");
 
+        printf("ROI 0 actual values:\n");
+        printf("  x_start: %d\n", roi_configs[0].x_start);
+        printf("  x_end:   %d\n", roi_configs[0].x_end);
+        printf("  y_start: %d\n", roi_configs[0].y_start);
+        printf("  y_end:   %d\n", roi_configs[0].y_end);
+        printf("  active:  %d\n", roi_configs[0].active);
         XSPI_NOR_OctalDTRModeCfg(&hxspi2);
 
         /* Optional: Basic Write/Read Test (erase/write/read via commands) */
@@ -1227,28 +1298,20 @@ void load_bad_pixel_map(void) {
         __ISB();
 
         printf("✓ XSPI Memory-Mapped Mode ready\n");
-
-
-        //complex gain frame to XSPI
-        generate_dummy_gain_frame(gain_frame);
-        //simple gain frame to XSPI to debug!
-        init_gain_frame();
-
-
+        // Simple test: Fill with known pattern
+        printf("\nDEBUG: Filling with test pattern...\n");
+        for (uint32_t y = 0; y < 10; y++) {
+            for (uint32_t x = 0; x < 10; x++) {
+                //gain_frame[y][x] = 0x7FFF;  // Unity gain
+                gain_frame[y][x] = 29000;
+            }
+        }
         // Test: Check gain_frame values BEFORE writing
         printf("\nDEBUG: Checking gain_frame before write:\n");
         printf("  [0][0]:       0x%04X\n", gain_frame[0][0]);
         printf("  [240][320]:   0x%04X\n", gain_frame[240][320]);
         printf("  [479][639]:   0x%04X\n", gain_frame[479][639]);
 
-        // Simple test: Fill with known pattern
-        printf("\nDEBUG: Filling with test pattern...\n");
-        for (uint32_t y = 0; y < 10; y++) {
-            for (uint32_t x = 0; x < 10; x++) {
-                gain_frame[y][x] = 0x7FFF;  // Unity gain
-            }
-        }
-        printf("  [0][0] after fill: 0x%04X\n", gain_frame[0][0]);
 		printf("  ✓ Test pattern written to gain_frame\n");
 
         if (XSPI_WriteGainFrame(&gain_frame[0][0], XSPI_GAIN_OFFSET) != HAL_OK) {
@@ -1296,6 +1359,23 @@ void load_bad_pixel_map(void) {
                (float)xspi_emissivity[240][320] / 32768.0f);
 
         // ═══════════════════════════════════════════════════════════════
+        // Generate and Write Offest Frame to XSPI
+        // ═══════════════════════════════════════════════════════════════
+        printf("\n");
+        generate_dummy_offest_frame(gain_frame);  // Reuse gain_frame buffer
+
+        if (XSPI_WriteOffsetFrame(&gain_frame[0][0], XSPI_OFFSET_OFFSET) != HAL_OK) {
+            printf("✗ Failed to write offset frame!\n");
+            Error_Handler();
+        }
+
+        printf("\nOffset frame verification from XSPI...\n");
+        printf("  Memory-mapped address: 0x%08lX\n", (uint32_t)(XSPI_BASE + XSPI_OFFSET_OFFSET));
+        printf("  Sample value [240][320]: 0x%04X (%u Offset)\n",
+               xspi_offset[240][320],
+               xspi_offset[240][320]);
+
+        // ═══════════════════════════════════════════════════════════════
         // Restore gain frame from XSPI (we reused the buffer)
         // ═══════════════════════════════════════════════════════════════
         printf("\nRestoring gain frame to AXISRAM1...\n");
@@ -1325,7 +1405,7 @@ void load_bad_pixel_map(void) {
         // Initialize dark frame (will be replaced by real calibration)
         for (uint32_t y = 0; y < VPIX; y++) {
             for (uint32_t x = 0; x < HPIX; x++) {
-                dark_frame[y][x] = 100 + (x % 10);
+                dark_frame[y][x] = 4000 + (x % 10);
             }
         }
 
@@ -1352,7 +1432,7 @@ void load_bad_pixel_map(void) {
         load_bad_pixel_map();
 
         // Initialize gain frame (already loaded from XSPI above)
-        // init_gain_frame();  // Don't overwrite XSPI data!
+        //init_gain_frame();  // Don't overwrite XSPI data!
 
         printf("\n");
         printf("╔═══════════════════════════════════════════════════════════╗\n");
@@ -1368,81 +1448,105 @@ void load_bad_pixel_map(void) {
 
             /* USER CODE BEGIN 3 */
 
-            DWT->CYCCNT = 0;
+        	DWT->CYCCNT = 0;
 
-            // ═══════════════════════════════════════════════════════════
-            // Calibration Mode
-            // ═══════════════════════════════════════════════════════════
-            if (is_calibrating()) {
-                if (process_calibration_frame(frame_buffer_B)) {
-                    printf("Returning to normal processing...\n\n");
-                }
-                HAL_Delay(20);
-                continue;
-            }
+        	if (is_calibrating()) {
+        	    if (process_calibration_frame(frame_buffer_B)) {
+        	        printf("Returning to normal processing...\n\n");
+        	    }
+        	    HAL_Delay(20);
+        	    continue;
+        	}
 
-            // ═══════════════════════════════════════════════════════════
-            // Temperature Compensation (on-demand)
-            // ═══════════════════════════════════════════════════════════
-            float temp_diff = fabsf(T_chip_c - last_T_chip_c);
+        	// Temperature Compensation (KEIN printf!)
+        	float temp_diff = fabsf(T_chip_c - last_T_chip_c);
 
-            if (temp_diff > 0.5f) {
-                // Update gain frame for temperature change
-                float dT = (T_chip_c - T0_chip_c);
-                float temp_gain_f = 1.0f / (1.0f + alpha * dT);
-                uint16_t temp_gain_q15 = q15_from_float(temp_gain_f);
+        	if (temp_diff > 0.5f) {
+        	    float dT = (T_chip_c - T0_chip_c);
+        	    float temp_gain_f = 1.0f / (1.0f + alpha * dT);
+        	    uint16_t temp_gain_q15 = q15_from_float(temp_gain_f);
 
-                for (uint32_t y = 0; y < VPIX; y++) {
-                    for (uint32_t x = 0; x < HPIX; x++) {
-                        gain_frame[y][x] = q15_mul_scalar_u16(0x7FFF, temp_gain_q15);
-                    }
-                }
+        	    for (uint32_t y = 0; y < VPIX; y++) {
+        	        for (uint32_t x = 0; x < HPIX; x++) {
+        	            gain_frame[y][x] = q15_mul_scalar_u16(0x7FFF, temp_gain_q15);
+        	        }
+        	    }
 
-                last_T_chip_c = T_chip_c;
-            }
+        	    last_T_chip_c = T_chip_c;
+        	}
 
-            // ═══════════════════════════════════════════════════════════
-            // Main Thermal Processing Pipeline
-            // ═══════════════════════════════════════════════════════════
-            for (int line = 0; line < VPIX; ++line)
-            {
-                process_thermal_line_fastest(
-                    frame_buffer_A[line],
-                    dark_frame[line],
-                    gain_frame[line],           // From AXISRAM1
-                    offset_line,
-					(const uint16_t *)xspi_emissivity[line],
-                    planck_table,
-                    frame_buffer_B[line],
-                    HPIX
-                );
-            }
+        	// PHASE 1: Thermal Processing (KEIN printf!)
+        	uint32_t thermal_start = DWT->CYCCNT;
 
-            // ═══════════════════════════════════════════════════════════
-            // Bad Pixel Correction
-            // ═══════════════════════════════════════════════════════════
-            if (g_num_patches > 0) {
-                apply_bad_pixel_patches(&frame_buffer_B[0][0], g_num_patches);
-            }
+        	for (int line = 0; line < VPIX; ++line) {
+        	    process_thermal_line_fastest(
+        	        frame_buffer_A[line],
+        	        dark_frame[line],
+        	        gain_frame[line],
+        	        offset_line,
+        	        (const uint16_t *)xspi_emissivity[line],
+        	        planck_table,
+        	        frame_buffer_B[line],
+        	        HPIX
+        	    );
+        	    // ← HIER DARF KEIN printf() SEIN!
+        	}
 
-            // ═══════════════════════════════════════════════════════════
-            // Output Verification (prevents over-optimization)
-            // ═══════════════════════════════════════════════════════════
-            volatile uint32_t checksum = 0;
-            for (int y = 0; y < VPIX; y += 10) {
-                checksum += frame_buffer_B[y][0];
-            }
+        	uint32_t thermal_cycles = DWT->CYCCNT - thermal_start;
 
-            // ═══════════════════════════════════════════════════════════
-            // Performance Monitoring
-            // ═══════════════════════════════════════════════════════════
-            uint32_t cycles = DWT->CYCCNT;
+        	// Bad Pixel Correction (KEIN printf!)
+        	if (g_num_patches > 0) {
+        	    apply_bad_pixel_patches(&frame_buffer_B[0][0], g_num_patches);
+        	}
+
+        	// ROI Statistics (KEIN printf!)
+        	uint32_t roi_cycles = 0;
+
+        	roi_frame_counter++;
+        	//printf("[ROI] cfg=%p res=%p\n", roi_configs, roi_results);
+
+        	if (roi_frame_counter % ROI_UPDATE_DIVIDER == 0) {
+        	    uint32_t roi_start = DWT->CYCCNT;
+
+        	    ROI_CalculateStatistics_Helium(
+        	        frame_buffer_B,
+        	        (const ROI_Config_t *)roi_configs,  // ← Explicit cast
+        	        (ROI_Result_t *)roi_results,        // ← Explicit cast
+        	        MAX_ROIS
+        	    );
+
+        	    ROI_ConvertToCelsius(roi_results, roi_stats_celsius, MAX_ROIS);
+
+        	    roi_cycles = DWT->CYCCNT - roi_start;
+        	}
+
+        	// Output Verification (KEIN printf!)
+        	volatile uint32_t checksum = 0;
+        	for (int y = 0; y < VPIX; y += 10) {
+        	    checksum += frame_buffer_B[y][0];
+        	}
+
+        	// Performance Monitoring
+        	uint32_t total_cycles = DWT->CYCCNT;
 
             if (++count >= 100) {
-                printf("Frame: %lu cycles (%lu ms) - CS: %lu - BP: %lu\n",
-                       cycles, cycles / 600000, checksum, (unsigned long)g_num_patches);
+                printf("Frame: %lu cycles (%lu ms) - CS: %lu - BP: %lu in:%lu dark:%lu gain: %lu (%.3f) offset:%lu e:%lu (%.3f)  out:%lu\n",
+                		thermal_cycles, thermal_cycles / 600000, checksum, (unsigned long)g_num_patches,frame_buffer_A[240][320], dark_frame[240][320],gain_frame[240][320],
+					   (float)(int16_t)gain_frame[240][320] / 32768.0f, xspi_offset[240][320], xspi_emissivity[240][320],(float)xspi_emissivity[240][320] / 32768.0f ,frame_buffer_B[240][320]);
                 count = 0;
-
+                printf("\n╔════════════════════════════════════════════════╗\n");
+                   printf("║  PERFORMANCE BREAKDOWN                         ║\n");
+                   printf("╚════════════════════════════════════════════════╝\n");
+                   printf("Thermal:     %7lu cycles (%3lu ms)\n", thermal_cycles, thermal_cycles/600000);
+                  // printf("Bad Pixel:   %7lu cycles (%3lu ms)\n", bp_cycles, bp_cycles/600000);
+                   printf("ROI:         %7lu cycles (%3lu ms)\n", roi_cycles, roi_cycles/600000);
+                   printf("Total:       %7lu cycles (%3lu ms) = %lu Hz\n",
+                          total_cycles, total_cycles/600000, 600000000/total_cycles);
+                   printf("CS: %lu | BP: %lu\n\n", checksum, (unsigned long)g_num_patches);
+                   if (roi_cycles > 0) {
+                           ROI_PrintStatistics(roi_stats_celsius, MAX_ROIS);
+                       }
+                   count = 0;
                 // Optional: Trigger calibration every 100 frames
                 // start_dark_frame_calibration();
             }
@@ -2241,6 +2345,174 @@ void load_bad_pixel_map(void) {
         return HAL_OK;
     }
 
+
+    HAL_StatusTypeDef XSPI_WriteOffsetFrame(const uint16_t *offset_frame, uint32_t flash_offset)
+        {
+            const uint32_t OFFSET_FRAME_SIZE = 640 * 480 * 2;  // 614,400 bytes
+            const uint32_t BLOCK_SIZE = 64 * 1024;                  // 64 KB
+            const uint32_t PAGE_SIZE = 256;                         // 256 bytes
+
+            printf("\n");
+            printf("╔═══════════════════════════════════════════════════════════╗\n");
+            printf("║  Writing OFFSET Frame to XSPI Flash                  ║\n");
+            printf("╚═══════════════════════════════════════════════════════════╝\n");
+            printf("\n");
+
+            printf("Target address: 0x%08lX\n", flash_offset);
+            printf("Size:           %lu bytes (%lu KB)\n", OFFSET_FRAME_SIZE, OFFSET_FRAME_SIZE / 1024);
+
+            // ═══════════════════════════════════════════════════════════════
+            // 1. Exit Memory-Mapped Mode
+            // ═══════════════════════════════════════════════════════════════
+            printf("\n[1/4] Exiting memory-mapped mode...\n");
+
+            if (HAL_XSPI_Abort(&hxspi2) != HAL_OK) {
+                printf("  ✗ Failed to exit memory-mapped mode!\n");
+                return HAL_ERROR;
+            }
+
+            printf("  ✓ Memory-mapped mode disabled\n");
+
+            // ═══════════════════════════════════════════════════════════════
+            // 2. Erase Required Blocks (64KB each)
+            // ═══════════════════════════════════════════════════════════════
+            uint32_t num_blocks = (OFFSET_FRAME_SIZE + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+            printf("\n[2/4] Erasing %lu blocks (64KB each)...\n", num_blocks);
+
+            uint32_t erase_start = DWT->CYCCNT;
+
+            for (uint32_t i = 0; i < num_blocks; i++) {
+                uint32_t block_addr = flash_offset + (i * BLOCK_SIZE);
+
+                printf("  Erasing block %lu/%lu @ 0x%08lX...\n", i + 1, num_blocks, block_addr);
+                fflush(stdout);
+
+                if (XSPI_EraseSector(block_addr) != HAL_OK) {
+                    printf("\n  ✗ Erase failed at block %lu!\n", i);
+                    return HAL_ERROR;
+                }
+            }
+
+            uint32_t erase_cycles = DWT->CYCCNT - erase_start;
+            printf("\n  ✓ Erase complete (%lu ms)\n", erase_cycles / 600000);
+
+            // ═══════════════════════════════════════════════════════════════
+            // 3. Program Data (256 bytes per page)
+            // ═══════════════════════════════════════════════════════════════
+            const uint8_t *src = (const uint8_t *)offset_frame;
+            uint32_t num_pages = (OFFSET_FRAME_SIZE + PAGE_SIZE - 1) / PAGE_SIZE;
+
+            printf("\n[3/4] Programming %lu pages (256 bytes each)...\n", num_pages);
+
+            uint32_t prog_start = DWT->CYCCNT;
+
+            for (uint32_t i = 0; i < num_pages; i++) {
+                uint32_t page_addr = flash_offset + (i * PAGE_SIZE);
+                uint32_t page_size = PAGE_SIZE;
+
+                // Last page might be smaller
+                if (i == num_pages - 1) {
+                    uint32_t remainder = OFFSET_FRAME_SIZE % PAGE_SIZE;
+                    if (remainder != 0) {
+                        page_size = remainder;
+                    }
+                }
+
+                // Progress indicator every 100 pages
+                if (i % 100 == 0 || i == num_pages - 1) {
+                    uint32_t percent = (i * 100) / num_pages;
+                    printf("  Programming: %lu%% (%lu/%lu pages)...\n",
+                           percent, i + 1, num_pages);
+                    fflush(stdout);
+                }
+
+                if (XSPI_ProgramPage(page_addr, &src[i * PAGE_SIZE], page_size) != HAL_OK) {
+                    printf("\n  ✗ Program failed at page %lu (addr: 0x%08lX)!\n",
+                           i, page_addr);
+                    return HAL_ERROR;
+                }
+            }
+
+            uint32_t prog_cycles = DWT->CYCCNT - prog_start;
+            uint32_t prog_us = prog_cycles / 600;
+            uint32_t speed_kbps = (OFFSET_FRAME_SIZE * 1000) / prog_us;  // KB/s
+
+            printf("\n  ✓ Programming complete\n");
+            printf("    Time: %lu ms\n", prog_cycles / 600000);
+            printf("    Speed: %lu KB/s\n", speed_kbps);
+
+            // ═══════════════════════════════════════════════════════════════
+            // 4. Re-enter Memory-Mapped Mode
+            // ═══════════════════════════════════════════════════════════════
+            printf("\n[4/4] Re-entering memory-mapped mode...\n");
+
+            // READ configuration
+            XSPI_RegularCmdTypeDef sRead = {0};
+            sRead.OperationType        = HAL_XSPI_OPTYPE_READ_CFG;
+            sRead.Instruction          = OCTAL_IO_DTR_READ_CMD;
+            sRead.InstructionMode      = HAL_XSPI_INSTRUCTION_8_LINES;
+            sRead.InstructionWidth     = HAL_XSPI_INSTRUCTION_16_BITS;
+            sRead.InstructionDTRMode   = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+            sRead.AddressMode          = HAL_XSPI_ADDRESS_8_LINES;
+            sRead.AddressWidth         = HAL_XSPI_ADDRESS_32_BITS;
+            sRead.AddressDTRMode       = HAL_XSPI_ADDRESS_DTR_ENABLE;
+            sRead.DataMode             = HAL_XSPI_DATA_8_LINES;
+            sRead.DataDTRMode          = HAL_XSPI_DATA_DTR_ENABLE;
+            sRead.DummyCycles          = DUMMY_CLOCK_CYCLES_READ_OCTAL;
+            sRead.DQSMode              = HAL_XSPI_DQS_ENABLE;
+            sRead.AlternateBytesMode   = HAL_XSPI_ALT_BYTES_NONE;
+
+            if (HAL_XSPI_Command(&hxspi2, &sRead, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+                printf("  ✗ READ-CFG failed\n");
+                return HAL_ERROR;
+            }
+
+            // WRITE configuration
+            XSPI_RegularCmdTypeDef sWrite = {0};
+            sWrite.OperationType       = HAL_XSPI_OPTYPE_WRITE_CFG;
+            sWrite.Instruction         = OCTAL_PAGE_PROG_CMD;
+            sWrite.InstructionMode     = HAL_XSPI_INSTRUCTION_8_LINES;
+            sWrite.InstructionWidth    = HAL_XSPI_INSTRUCTION_16_BITS;
+            sWrite.InstructionDTRMode  = HAL_XSPI_INSTRUCTION_DTR_ENABLE;
+            sWrite.AddressMode         = HAL_XSPI_ADDRESS_8_LINES;
+            sWrite.AddressWidth        = HAL_XSPI_ADDRESS_32_BITS;
+            sWrite.AddressDTRMode      = HAL_XSPI_ADDRESS_DTR_ENABLE;
+            sWrite.DataMode            = HAL_XSPI_DATA_8_LINES;
+            sWrite.DataDTRMode         = HAL_XSPI_DATA_DTR_ENABLE;
+            sWrite.DummyCycles         = 0;
+            sWrite.DQSMode             = HAL_XSPI_DQS_DISABLE;
+            sWrite.AlternateBytesMode  = HAL_XSPI_ALT_BYTES_NONE;
+
+            if (HAL_XSPI_Command(&hxspi2, &sWrite, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) {
+                printf("  ✗ Write-CFG failed\n");
+                return HAL_ERROR;
+            }
+
+            // Enter Memory-Mapped mode
+            XSPI_MemoryMappedTypeDef sMMAP = {0};
+            sMMAP.TimeOutActivation  = HAL_XSPI_TIMEOUT_COUNTER_ENABLE;
+            sMMAP.TimeoutPeriodClock = 0x50;
+
+            if (HAL_XSPI_MemoryMapped(&hxspi2, &sMMAP) != HAL_OK) {
+                printf("  ✗ Memory-Mapped re-entry failed\n");
+                return HAL_ERROR;
+            }
+
+            printf("  ✓ Memory-mapped mode enabled\n");
+
+            // ═══════════════════════════════════════════════════════════════
+            // Success!
+            // ═══════════════════════════════════════════════════════════════
+            printf("\n");
+            printf("╔═══════════════════════════════════════════════════════════╗\n");
+            printf("║  ✓ Offset Frame written successfully!                ║\n");
+            printf("╚═══════════════════════════════════════════════════════════╝\n");
+            printf("\n");
+
+            return HAL_OK;
+        }
+
     static HAL_StatusTypeDef XSPI_EraseSector(uint32_t address)
     {
         XSPI_RegularCmdTypeDef sCommand = {0};
@@ -2318,4 +2590,308 @@ void load_bad_pixel_map(void) {
         XSPI_AutoPollingMemReady(&hxspi2);
         return HAL_OK;
     }
+    /**
+     * @brief Initialize ROI configurations with default values
+     */
+    void ROI_Init(void)
+    {
+        // Optional: Divider hochsetzen, wenn du ROI nicht jedes Frame brauchst
+        // (stell das besser oben in die Defines ein)
+        // #undef  ROI_UPDATE_DIVIDER
+        // #define ROI_UPDATE_DIVIDER 5
+
+        printf("\nInitializing ROI configurations...\n");
+
+        // Alles erst mal auf 0 / inaktiv
+        for (uint8_t i = 0; i < MAX_ROIS; i++) {
+            roi_configs[i].x_start = 0;
+            roi_configs[i].y_start = 0;
+            roi_configs[i].x_end   = 0;
+            roi_configs[i].y_end   = 0;
+            roi_configs[i].active  = 0;
+
+            roi_results[i].min   = 0;
+            roi_results[i].max   = 0;
+            roi_results[i].sum   = 0;
+            roi_results[i].count = 0;
+            roi_results[i].mean  = 0;
+        }
+
+        // ---- Empfehlung: Vollbild-ROI AUS, um doppelte Arbeit zu vermeiden ----
+        // Falls du das Vollbild wirklich brauchst, setze active=1.
+        roi_configs[0].x_start = 0;
+        roi_configs[0].y_start = 0;
+        roi_configs[0].x_end   = HPIX - 1;      // 639
+        roi_configs[0].y_end   = VPIX - 1;      // 479
+        roi_configs[0].active  = 1;             // <— AUS (Quadranten decken Vollbild ab)
+
+        // Quadranten (320×240)
+        const uint16_t half_x = HPIX / 2;
+        const uint16_t half_y = VPIX / 2;
+
+        // ROI 1: Top-Left
+        roi_configs[1].x_start = 0;
+        roi_configs[1].y_start = 0;
+        roi_configs[1].x_end   = half_x - 1;
+        roi_configs[1].y_end   = half_y - 1;
+        roi_configs[1].active  = 1;
+
+        // ROI 2: Top-Right
+        roi_configs[2].x_start = half_x;
+        roi_configs[2].y_start = 0;
+        roi_configs[2].x_end   = HPIX - 1;
+        roi_configs[2].y_end   = half_y - 1;
+        roi_configs[2].active  = 1;
+
+        // ROI 3: Bottom-Left
+        roi_configs[3].x_start = 0;
+        roi_configs[3].y_start = half_y;
+        roi_configs[3].x_end   = half_x - 1;
+        roi_configs[3].y_end   = VPIX - 1;
+        roi_configs[3].active  = 1;
+
+        // ROI 4: Bottom-Right
+        roi_configs[4].x_start = half_x;
+        roi_configs[4].y_start = half_y;
+        roi_configs[4].x_end   = HPIX - 1;
+        roi_configs[4].y_end   = VPIX - 1;
+        roi_configs[4].active  = 1;
+
+        // ROI 5: Center (160×120)
+        uint16_t cx0 = (HPIX / 2) - 80;
+        uint16_t cy0 = (VPIX / 2) - 60;
+        uint16_t cx1 = (HPIX / 2) + 79;
+        uint16_t cy1 = (VPIX / 2) + 59;
+
+        // clampen (falls Auflösung mal anders ist)
+        if (cx0 > HPIX-1) cx0 = 0;
+        if (cy0 > VPIX-1) cy0 = 0;
+        if (cx1 > HPIX-1) cx1 = HPIX-1;
+        if (cy1 > VPIX-1) cy1 = VPIX-1;
+
+        roi_configs[5].x_start = cx0;
+        roi_configs[5].y_start = cy0;
+        roi_configs[5].x_end   = cx1;
+        roi_configs[5].y_end   = cy1;
+        roi_configs[5].active  = 1;
+
+        // ROI 6–8: frei konfigurierbar, bleiben inaktiv
+        for (uint8_t i = 6; i < MAX_ROIS; i++) {
+            roi_configs[i].x_start = i*10;
+            roi_configs[i].y_start = i*10;
+            roi_configs[i].x_end   = i*10+5;
+            roi_configs[i].y_end   = i*10+5;
+            roi_configs[i].active  = 1;
+        }
+
+        // Logging
+        printf("  ROI 0: Full frame [%u,%u] to [%u,%u] (%ux%u) active=%u\n",
+               roi_configs[0].x_start, roi_configs[0].y_start,
+               roi_configs[0].x_end,   roi_configs[0].y_end,
+               (unsigned)HPIX, (unsigned)VPIX, roi_configs[0].active);
+
+        printf("  ROI 1-4: Quadrants (each %ux%u) active=1\n",
+               (unsigned)half_x, (unsigned)half_y);
+
+        printf("  ROI 5: Center [%u,%u] to [%u,%u] (%ux%u) active=%u\n",
+               roi_configs[5].x_start, roi_configs[5].y_start,
+               roi_configs[5].x_end,   roi_configs[5].y_end,
+               (unsigned)(roi_configs[5].x_end - roi_configs[5].x_start + 1),
+               (unsigned)(roi_configs[5].y_end - roi_configs[5].y_start + 1),
+               roi_configs[5].active);
+
+        // Debug: Adressen (hilfreich für NULL-Checks und AXISRAM-Layout)
+        printf("\nDEBUG Memory Addresses:\n");
+        printf("  roi_configs addr:  %p\n", (void*)roi_configs);
+        printf("  roi_results addr:  %p\n", (void*)roi_results);
+        printf("  frame_buffer addr: %p\n", (void*)frame_buffer_A);
+
+        printf("✓ ROI configurations initialized\n");
+    }
+
+    /* USER CODE BEGIN 4 */
+
+    // ... (existing functions) ...
+
+    /**
+     * @brief Calculate ROI statistics using Helium optimization
+     */
+
+    __attribute__((noinline))
+    void ROI_CalculateStatistics_Helium(
+        const uint16_t frame[VPIX][HPIX],
+        const ROI_Config_t *cfg_in,
+        ROI_Result_t *res_out,
+        uint8_t num_rois)
+    {
+        // Eindeutige Namen (verhindert Verwechslung mit globalen Symbolen)
+        // und HARDCHECK statt Silent-Return:
+        if (cfg_in == NULL || res_out == NULL) {
+            printf("[ROI] FATAL: NULL args (cfg=%p, res=%p)\n", (void*)cfg_in, (void*)res_out);
+            // KEIN return stillschweigend – hier bewusst abbrechen:
+            return;
+        }
+//        int active=0; for (uint8_t i=0;i<num_rois;i++) if (cfg_in[i].active) active++;
+//        printf("[ROI] active=%d (divider=%d)\n", active, ROI_UPDATE_DIVIDER);
+//        for (uint8_t i=0;i<num_rois;i++) {
+//            printf("lokal [ROI%u] act=%u x=[%u..%u] y=[%u..%u]\n",
+//                   i, cfg_in[i].active, cfg_in[i].x_start, cfg_in[i].x_end,
+//                   cfg_in[i].y_start, cfg_in[i].y_end);
+//        }
+//
+//        for (uint8_t i=0;i<MAX_ROIS;i++) {
+//            printf("global [ROI%u] act=%u x=[%u..%u] y=[%u..%u]\n",
+//                   i, roi_configs[i].active,
+//                   roi_configs[i].x_start, roi_configs[i].x_end,
+//                   roi_configs[i].y_start, roi_configs[i].y_end);
+//        }
+
+
+    // defensiv initialisieren
+    for (uint8_t r = 0; r < num_rois; ++r) {
+    	res_out[r].min   = 0xFFFF;
+    	res_out[r].max   = 0x0000;
+    	res_out[r].sum   = 0;
+    	res_out[r].count = 0;
+    	res_out[r].mean  = 0;
+    }
+
+    for (uint8_t roi = 0; roi < num_rois; ++roi) {
+        const ROI_Config_t *cfg = &cfg_in[roi];
+        if (!cfg->active) continue;
+
+        // clamp
+        uint16_t x_start = (cfg->x_start < HPIX) ? cfg->x_start : (HPIX - 1);
+        uint16_t y_start = (cfg->y_start < VPIX) ? cfg->y_start : (VPIX - 1);
+        uint16_t x_end   = (cfg->x_end   < HPIX) ? cfg->x_end   : (HPIX - 1);
+        uint16_t y_end   = (cfg->y_end   < VPIX) ? cfg->y_end   : (VPIX - 1);
+        if (x_end < x_start || y_end < y_start) {
+        	res_out[roi].min = res_out[roi].max =
+        			res_out[roi].sum = res_out[roi].count =
+        					res_out[roi].mean = 0;
+            continue;
+        }
+
+        // Skalar-Akkus
+        uint16_t running_min = 0xFFFF;
+        uint16_t running_max = 0x0000;
+        uint64_t running_sum = 0;
+        uint32_t total_count = 0;
+
+        // Vektor-Akkus (über gesamte ROI)
+        uint16x8_t vmin_all  = vdupq_n_u16(0xFFFF);
+        uint16x8_t vmax_all  = vdupq_n_u16(0x0000);
+        uint32x4_t vsum0_all = vdupq_n_u32(0);
+        uint32x4_t vsum1_all = vdupq_n_u32(0);
+
+        for (uint16_t y = y_start; y <= y_end; ++y) {
+            const uint16_t *line = &frame[y][0];
+            uint16_t x = x_start;
+            uint16_t width = (uint16_t)(x_end - x_start + 1);
+
+            // 8-wide MVE-Blöcke
+            uint16_t n8 = width >> 3;
+            for (uint16_t i = 0; i < n8; ++i, x += 8) {
+                uint16x8_t v = vld1q_u16(&line[x]);
+                // min/max vektoriell
+                vmin_all = vminq_u16(vmin_all, v);
+                vmax_all = vmaxq_u16(vmax_all, v);
+                // Summe: widen lower/upper 4 Lanes zu u32 und addieren
+                vsum0_all = vaddq_u32(vsum0_all, vmovlbq_u16(v)); // lower half widened
+                vsum1_all = vaddq_u32(vsum1_all, vmovltq_u16(v)); // upper half widened
+                total_count += 8;
+            }
+
+            // Tail (0..7 Elemente) skalar
+            uint16_t rem = (uint16_t)(width & 7);
+            for (uint16_t i = 0; i < rem; ++i) {
+                uint16_t val = line[x + i];
+                if (val < running_min) running_min = val;
+                if (val > running_max) running_max = val;
+                running_sum += val;
+                total_count++;
+            }
+        }
+
+        // Horizontale Reduktion der Vektor-Min/Max
+        uint16_t min8[8], max8[8];
+        vst1q_u16(min8, vmin_all);
+        vst1q_u16(max8, vmax_all);
+        for (int i = 0; i < 8; ++i) {
+            if (min8[i] < running_min) running_min = min8[i];
+            if (max8[i] > running_max) running_max = max8[i];
+        }
+
+        // Horizontale Reduktion der Vektor-Summen
+        uint32_t s0[4], s1[4];
+        vst1q_u32(s0, vsum0_all);
+        vst1q_u32(s1, vsum1_all);
+        running_sum += (uint64_t)s0[0] + s0[1] + s0[2] + s0[3]
+                     + (uint64_t)s1[0] + s1[1] + s1[2] + s1[3];
+
+        // Ergebnisse schreiben
+        res_out[roi].min   = running_min;
+        res_out[roi].max   = running_max;
+        res_out[roi].sum   = (uint32_t)running_sum;
+        res_out[roi].count = total_count;
+        res_out[roi].mean  = (total_count > 0) ? (uint16_t)(running_sum / total_count) : 0;
+    }
+}
+
+    /* USER CODE END 4 */
+
+    /**
+     * @brief Convert encoded ROI results to Celsius
+     */
+    void ROI_ConvertToCelsius(
+        const ROI_Result_t *roi_results,
+        ROI_Stats_Celsius_t *roi_stats_celsius,
+        uint8_t num_rois)
+    {
+        for (uint8_t i = 0; i < num_rois; i++) {
+            if (roi_results[i].count == 0) {
+                roi_stats_celsius[i].min_temp_c   = 0.0f;
+                roi_stats_celsius[i].max_temp_c   = 0.0f;
+                roi_stats_celsius[i].mean_temp_c  = 0.0f;
+                roi_stats_celsius[i].pixel_count  = 0;
+            } else {
+                roi_stats_celsius[i].min_temp_c   = decode_temperature(roi_results[i].min);
+                roi_stats_celsius[i].max_temp_c   = decode_temperature(roi_results[i].max);
+                roi_stats_celsius[i].mean_temp_c  = decode_temperature(roi_results[i].mean);
+                roi_stats_celsius[i].pixel_count  = roi_results[i].count;
+            }
+        }
+    }
+
+    /**
+     * @brief Print ROI statistics to console
+     */
+    void ROI_PrintStatistics(
+        const ROI_Stats_Celsius_t *roi_stats_celsius,
+        uint8_t num_rois)
+    {
+        printf("\n");
+        printf("╔═══════════════════════════════════════════════════════════╗\n");
+        printf("║  ROI STATISTICS                                           ║\n");
+        printf("╚═══════════════════════════════════════════════════════════╝\n");
+        printf("\n");
+
+        printf("ROI  Pixels     Min(°C)  Max(°C)  Mean(°C)\n");
+        printf("─────────────────────────────────────────────\n");
+
+        for (uint8_t i = 0; i < num_rois; i++) {
+            if (roi_stats_celsius[i].pixel_count == 0) {
+                printf("%3d  Inactive\n", i);
+            } else {
+                printf("%3d  %6lu   %7.2f  %7.2f  %7.2f\n",
+                       i,
+                       roi_stats_celsius[i].pixel_count,
+                       roi_stats_celsius[i].min_temp_c,
+                       roi_stats_celsius[i].max_temp_c,
+                       roi_stats_celsius[i].mean_temp_c);
+            }
+        }
+        printf("\n");
+    }
+
 
