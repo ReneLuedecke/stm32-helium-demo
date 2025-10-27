@@ -1796,6 +1796,8 @@ void print_system_status(uint32_t fps, uint32_t frame_time_ms, float temp_c,
 
         static int count = 0;
 
+
+        static uint8_t led_state = 0;
         while (1)
         {
             /* USER CODE END WHILE */
@@ -1846,7 +1848,16 @@ void print_system_status(uint32_t fps, uint32_t frame_time_ms, float temp_c,
         	    // ← HIER DARF KEIN printf() SEIN!
         	}
 
-        	uint32_t thermal_cycles = DWT->CYCCNT - thermal_start;
+
+            if (led_state) {
+                LED1_RESET();
+                led_state = 0;
+            } else {
+                LED1_SET();
+                led_state = 1;
+            }
+
+            uint32_t thermal_cycles = DWT->CYCCNT - thermal_start;
 
         	// Bad Pixel Correction (KEIN printf!)
         	if (g_num_patches > 0) {
