@@ -71,26 +71,115 @@ void HAL_MspInit(void)
 
   HAL_PWREx_EnableVddIO3();
 
+  HAL_PWREx_EnableVddIO5();
+
   /* USER CODE BEGIN MspInit 1 */
 
   /* USER CODE END MspInit 1 */
 }
 
 /**
-* @brief XSPI MSP Initialization
-* This function configures the hardware resources used in this example
-* @param hxspi: XSPI handle pointer
-* @retval None
-*/
+  * @brief UART MSP Initialization
+  * This function configures the hardware resources used in this example
+  * @param huart: UART handle pointer
+  * @retval None
+  */
+void HAL_UART_MspInit(UART_HandleTypeDef* huart)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+  if(huart->Instance==USART1)
+  {
+    /* USER CODE BEGIN USART1_MspInit 0 */
+
+    /* USER CODE END USART1_MspInit 0 */
+
+  /** Initializes the peripherals clock
+  */
+    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_USART1;
+    PeriphClkInitStruct.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK2;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    /* Peripheral clock enable */
+    __HAL_RCC_USART1_CLK_ENABLE();
+
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+    __HAL_RCC_GPIOE_CLK_ENABLE();
+    /**USART1 GPIO Configuration
+    PC4     ------> USART1_TX
+    PE6     ------> USART1_RX
+    */
+    GPIO_InitStruct.Pin = GPIO_PIN_4;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF4_USART1;
+    HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = GPIO_PIN_6;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF7_USART1;
+    HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+    /* USER CODE BEGIN USART1_MspInit 1 */
+
+    /* USER CODE END USART1_MspInit 1 */
+
+  }
+
+}
+
+/**
+  * @brief UART MSP De-Initialization
+  * This function freeze the hardware resources used in this example
+  * @param huart: UART handle pointer
+  * @retval None
+  */
+void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
+{
+  if(huart->Instance==USART1)
+  {
+    /* USER CODE BEGIN USART1_MspDeInit 0 */
+
+    /* USER CODE END USART1_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __HAL_RCC_USART1_CLK_DISABLE();
+
+    /**USART1 GPIO Configuration
+    PC4     ------> USART1_TX
+    PE6     ------> USART1_RX
+    */
+    HAL_GPIO_DeInit(GPIOC, GPIO_PIN_4);
+
+    HAL_GPIO_DeInit(GPIOE, GPIO_PIN_6);
+
+    /* USER CODE BEGIN USART1_MspDeInit 1 */
+
+    /* USER CODE END USART1_MspDeInit 1 */
+  }
+
+}
+
+/**
+  * @brief XSPI MSP Initialization
+  * This function configures the hardware resources used in this example
+  * @param hxspi: XSPI handle pointer
+  * @retval None
+  */
 void HAL_XSPI_MspInit(XSPI_HandleTypeDef* hxspi)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
   if(hxspi->Instance==XSPI2)
   {
-  /* USER CODE BEGIN XSPI2_MspInit 0 */
+    /* USER CODE BEGIN XSPI2_MspInit 0 */
     HAL_PWREx_ConfigVddIORange(PWR_VDDIO3, PWR_VDDIO_RANGE_1V8);
-  /* USER CODE END XSPI2_MspInit 0 */
+    /* USER CODE END XSPI2_MspInit 0 */
 
   /** Initializes the peripherals clock
   */
@@ -133,27 +222,27 @@ void HAL_XSPI_MspInit(XSPI_HandleTypeDef* hxspi)
     /* XSPI2 interrupt Init */
     HAL_NVIC_SetPriority(XSPI2_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(XSPI2_IRQn);
-  /* USER CODE BEGIN XSPI2_MspInit 1 */
+    /* USER CODE BEGIN XSPI2_MspInit 1 */
 
-  /* USER CODE END XSPI2_MspInit 1 */
+    /* USER CODE END XSPI2_MspInit 1 */
 
   }
 
 }
 
 /**
-* @brief XSPI MSP De-Initialization
-* This function freeze the hardware resources used in this example
-* @param hxspi: XSPI handle pointer
-* @retval None
-*/
+  * @brief XSPI MSP De-Initialization
+  * This function freeze the hardware resources used in this example
+  * @param hxspi: XSPI handle pointer
+  * @retval None
+  */
 void HAL_XSPI_MspDeInit(XSPI_HandleTypeDef* hxspi)
 {
   if(hxspi->Instance==XSPI2)
   {
-  /* USER CODE BEGIN XSPI2_MspDeInit 0 */
+    /* USER CODE BEGIN XSPI2_MspDeInit 0 */
 
-  /* USER CODE END XSPI2_MspDeInit 0 */
+    /* USER CODE END XSPI2_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_XSPIM_CLK_DISABLE();
     __HAL_RCC_XSPI2_CLK_DISABLE();
@@ -177,9 +266,9 @@ void HAL_XSPI_MspDeInit(XSPI_HandleTypeDef* hxspi)
 
     /* XSPI2 interrupt DeInit */
     HAL_NVIC_DisableIRQ(XSPI2_IRQn);
-  /* USER CODE BEGIN XSPI2_MspDeInit 1 */
+    /* USER CODE BEGIN XSPI2_MspDeInit 1 */
 
-  /* USER CODE END XSPI2_MspDeInit 1 */
+    /* USER CODE END XSPI2_MspDeInit 1 */
   }
 
 }

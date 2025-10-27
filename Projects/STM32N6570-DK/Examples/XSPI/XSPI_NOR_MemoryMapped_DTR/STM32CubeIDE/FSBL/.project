@@ -107,6 +107,16 @@
 			<locationURI>PARENT-7-PROJECT_LOC/Drivers/STM32N6xx_HAL_Driver/Src/stm32n6xx_hal_rcc_ex.c</locationURI>
 		</link>
 		<link>
+			<name>Drivers/STM32N6xx_HAL_Driver/stm32n6xx_hal_uart.c</name>
+			<type>1</type>
+			<location>C:/Users/rene.luedecke/STM32Cube/Repository/STM32Cube_FW_N6_V1.1.1/Drivers/STM32N6xx_HAL_Driver/Src/stm32n6xx_hal_uart.c</location>
+		</link>
+		<link>
+			<name>Drivers/STM32N6xx_HAL_Driver/stm32n6xx_hal_uart_ex.c</name>
+			<type>1</type>
+			<location>C:/Users/rene.luedecke/STM32Cube/Repository/STM32Cube_FW_N6_V1.1.1/Drivers/STM32N6xx_HAL_Driver/Src/stm32n6xx_hal_uart_ex.c</location>
+		</link>
+		<link>
 			<name>Drivers/STM32N6xx_HAL_Driver/stm32n6xx_hal_xspi.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/Drivers/STM32N6xx_HAL_Driver/Src/stm32n6xx_hal_xspi.c</locationURI>

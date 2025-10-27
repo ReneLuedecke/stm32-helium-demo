@@ -21,7 +21,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "arm_mve.h"
+#include "stdio.h"
+#include <stdint.h>
+#include <string.h>
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,6 +45,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+UART_HandleTypeDef huart1;
 XSPI_HandleTypeDef hxspi2;
 
 /* USER CODE BEGIN PV */
@@ -54,6 +59,7 @@ __IO uint8_t CmdCplt,TxCplt;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_XSPI2_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 static void XSPI_WriteEnable(XSPI_HandleTypeDef *hxspi);
 static void XSPI_AutoPollingMemReady(XSPI_HandleTypeDef *hxspi);
@@ -62,7 +68,16 @@ static void XSPI_NOR_OctalDTRModeCfg(XSPI_HandleTypeDef *hxspi);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+#if !defined(TERMINAL_IO)
+#if defined(__ICCARM__)
+int iar_fputc(int ch);
+#define PUTCHAR_PROTOTYPE int iar_fputc(int ch)
+#elif defined ( __CC_ARM ) || defined(__ARMCC_VERSION)
+#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+#elif defined(__GNUC__)
+#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+#endif
+#endif
 /* USER CODE END 0 */
 
 /**
@@ -110,7 +125,35 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_XSPI2_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  const char *test_msg = "UART Test\r\n";
+
+  HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1,
+                                               (uint8_t*)test_msg,
+                                               strlen(test_msg),
+                                               1000);
+  if (status != HAL_OK)
+	    {
+	/* Transmission Error */
+	Error_Handler();
+  }
+  printf("\n");
+  printf("STM32N6 Thermal Imaging Pipeline Demoboard\n");
+  printf("\n");
+
+  printf("System Configuration:\n");
+  printf("  SYSCLK:     %lu MHz\n", HAL_RCC_GetSysClockFreq() / 1000000);
+  printf("  HCLK:       %lu MHz\n", HAL_RCC_GetHCLKFreq() / 1000000);
+  printf("  UART:       USART1 @ 115200 baud\n");
+  printf("  LED_GREEN:  Blinking\n");
+  printf("  LED_RED:    Ready\n\n");
+
+  printf("Testing printf with float: %.2f\n", 3.14159f);
+  printf("Testing printf with hex: 0x%08X\n", 0xDEADBEEF);
+  printf("Testing printf with long: %lu\n\n", 1234567890UL);
+
+  printf("✓ UART printf working!\n\n");
 
   /* Configure the memory in octal DTR mode ----------------------------------- */
   XSPI_NOR_OctalDTRModeCfg(&hxspi2);
@@ -358,7 +401,7 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_PCLK4;
   RCC_ClkInitStruct.CPUCLKSource = RCC_CPUCLKSOURCE_IC1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_IC2_IC6_IC11;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV4;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV1;
   RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
@@ -376,6 +419,51 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart1.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart1, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart1, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+  /* USER CODE END USART1_Init 2 */
+
 }
 
 /**
@@ -436,18 +524,42 @@ static void MX_XSPI2_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPION_CLK_ENABLE();
 
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-/* USER CODE END MX_GPIO_Init_2 */
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
+	#if !defined(TERMINAL_IO)
 
+    #if defined(__ICCARM__)
+    size_t __write(int file, unsigned char const *ptr, size_t len)
+    {
+        size_t idx;
+        unsigned char const *pdata = ptr;
+
+        for (idx = 0; idx < len; idx++)
+        {
+            iar_fputc((int)*pdata);
+            pdata++;
+        }
+        return len;
+    }
+    #endif
+
+    PUTCHAR_PROTOTYPE
+    {
+        HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
+        return ch;
+    }
+    #endif
 /**
   * @brief  Command completed callback.
   * @param  hxspi: XSPI handle
