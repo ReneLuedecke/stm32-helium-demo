@@ -45,7 +45,8 @@ _Min_Stack_Size = 0x800; /* required amount of stack */
 MEMORY
 {
   ROM    (xrw)    : ORIGIN = 0x34180400,   LENGTH = 255K
-  RAM    (xrw)    : ORIGIN = 0x341C0000,   LENGTH = 256K
+  RAM      (xrw) : ORIGIN = 0x34000000, LENGTH = 2048K
+  AXISRAM1 (xrw) : ORIGIN = 0x24060000, LENGTH = 1024K
 }
 
 /* Sections */
@@ -157,7 +158,13 @@ SECTIONS
     __enoncacheable = .;  /* create symbol for end of section */
   } > RAM
 
-
+   axisram1 (NOLOAD) :
+  {
+    . = ALIGN(16);
+    *(.axisram1)
+    . = ALIGN(16);
+  } > AXISRAM1
+  
   .gnu.sgstubs :
   {
     . = ALIGN(4);

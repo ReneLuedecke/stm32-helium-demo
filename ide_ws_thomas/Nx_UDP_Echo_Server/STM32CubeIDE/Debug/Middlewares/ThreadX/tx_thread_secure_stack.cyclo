@@ -1,0 +1,5 @@
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/threadx/ports/cortex_m55/gnu/src/tx_thread_secure_stack.c:119:9:_tx_thread_secure_mode_stack_initialize	4
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/threadx/ports/cortex_m55/gnu/src/tx_thread_secure_stack.c:216:9:_tx_thread_secure_mode_stack_allocate	7
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/threadx/ports/cortex_m55/gnu/src/tx_thread_secure_stack.c:363:9:_tx_thread_secure_mode_stack_free	4
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/threadx/ports/cortex_m55/gnu/src/tx_thread_secure_stack.c:468:6:_tx_thread_secure_stack_context_save	6
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/threadx/ports/cortex_m55/gnu/src/tx_thread_secure_stack.c:561:6:_tx_thread_secure_stack_context_restore	4

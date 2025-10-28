@@ -1,0 +1,8 @@
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/netxduo/common/drivers/ethernet/nx_stm32_eth_driver.c:2288:14:_nx_driver_hardware_packet_received	32	static
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/netxduo/common/drivers/ethernet/nx_stm32_eth_driver.c:150:7:nx_stm32_eth_driver	144	static,ignoring_inline_asm
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/netxduo/common/drivers/ethernet/nx_stm32_eth_driver.c:2255:6:HAL_ETH_TxFreeCallback	16	static
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/netxduo/common/drivers/ethernet/nx_stm32_eth_driver.c:2315:6:HAL_ETH_RxAllocateCallback	24	static,ignoring_inline_asm
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/netxduo/common/drivers/ethernet/nx_stm32_eth_driver.c:2364:6:HAL_ETH_RxLinkCallback	8	static
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/netxduo/common/drivers/ethernet/nx_stm32_eth_driver.c:2441:6:HAL_ETH_RxCpltCallback	0	static
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/netxduo/common/drivers/ethernet/nx_stm32_eth_driver.c:2465:6:HAL_ETH_TxCpltCallback	0	static
+D:/Code/STM32/RLU_Expriemente/stm32-helium-demo/ide_ws_thomas/Nx_UDP_Echo_Server/Middlewares/ST/netxduo/common/drivers/ethernet/nx_stm32_eth_driver.c:2649:6:nx_driver_shaper_config	32	static

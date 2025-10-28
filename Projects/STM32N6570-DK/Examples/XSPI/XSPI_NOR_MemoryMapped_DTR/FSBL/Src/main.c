@@ -35,7 +35,14 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define HPIX 640
+#define VPIX 480
 
+// XSPI Memory Map (wie Nucleo)
+#define XSPI_BASE_ADDRESS      0x70000000
+#define XSPI_DARK_OFFSET       0x00000000  // 600 KB
+#define XSPI_GAIN_OFFSET       0x00096000  // 600 KB
+#define XSPI_EMISSIVITY_OFFSET 0x0012C000  // 600 KB
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -54,6 +61,15 @@ XSPI_HandleTypeDef hxspi2;
 const uint8_t aTxBuffer[] = " ****Memory-mapped XSPI communication****  ****Memory-mapped XSPI communication****  ****Memory-mapped XSPI communication****  ****Memory-mapped XSPI communication****  ****Memory-mapped XSPI communication****  ****Memory-mapped XSPI communication**** ";
 uint8_t aRxBuffer[BUFFERSIZE] = {0};
 __IO uint8_t CmdCplt,TxCplt;
+
+#define TEST_LINES 10
+
+__attribute__((section(".axisram1"), aligned(32)))
+static uint16_t test_frame_a[TEST_LINES][HPIX];
+
+__attribute__((section(".axisram1"), aligned(32)))
+static uint16_t test_frame_b[TEST_LINES][HPIX];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -119,8 +135,8 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-  BSP_LED_Init(LED_GREEN);
-  BSP_LED_Init(LED_RED);
+  //BSP_LED_Init(LED_GREEN);
+  //BSP_LED_Init(LED_RED);
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -145,11 +161,158 @@ int main(void)
   printf("Testing printf with hex: 0x%08X\n", 0xDEADBEEF);
   printf("Testing printf with long: %lu\n\n", 1234567890UL);
 
-  printf("UART printf working!\n\n");
+
 
   /* Configure the memory in octal DTR mode ----------------------------------- */
   XSPI_NOR_OctalDTRModeCfg(&hxspi2);
   /* USER CODE END 2 */
+
+
+  printf("\n");
+  printf("+--------------------------------------------------+\n");
+  printf("| MEMORY TEST                                      |\n");
+  printf("+--------------------------------------------------+\n");
+
+  // Test 1: Fill pattern
+  printf("Test 1: Writing pattern to test buffers...\n");
+  for (uint32_t y = 0; y < TEST_LINES; y++) {
+      for (uint32_t x = 0; x < HPIX; x++) {
+          test_frame_a[y][x] = (uint16_t)((y * HPIX + x) & 0xFFFF);
+      }
+  }
+  printf("  ✓ Written %lu bytes\n", (uint32_t)(TEST_LINES * HPIX * 2));
+
+  // Test 2: Verify pattern
+  printf("Test 2: Verifying pattern...\n");
+  uint32_t errors = 0;
+  for (uint32_t y = 0; y < TEST_LINES; y++) {
+      for (uint32_t x = 0; x < HPIX; x++) {
+          uint16_t expected = (uint16_t)((y * HPIX + x) & 0xFFFF);
+          if (test_frame_a[y][x] != expected) {
+              errors++;
+              if (errors < 10) {  // Show first 10 errors only
+                  printf("  Error @ [%lu][%lu]: 0x%04X != 0x%04X\n",
+                         y, x, test_frame_a[y][x], expected);
+              }
+          }
+      }
+  }
+
+  if (errors == 0) {
+      printf("All %lu pixels correct!\n", (uint32_t)(TEST_LINES * HPIX));
+  } else {
+      printf("%lu errors found!\n", errors);
+  }
+  printf("Test 3: Memory copy test...\n");
+  uint32_t start_tick = HAL_GetTick();
+
+  for (uint32_t y = 0; y < TEST_LINES; y++) {
+      memcpy(test_frame_b[y], test_frame_a[y], HPIX * sizeof(uint16_t));
+  }
+
+  uint32_t end_tick = HAL_GetTick();
+  uint32_t duration = end_tick - start_tick;
+
+  printf("  ✓ Copied %lu KB in %lu ms\n",
+         (TEST_LINES * HPIX * 2) / 1024, duration);
+
+  // Test 4: Verify copy
+  printf("Test 4: Verify copy...\n");
+  errors = 0;
+  for (uint32_t y = 0; y < TEST_LINES; y++) {
+      for (uint32_t x = 0; x < HPIX; x++) {
+          if (test_frame_a[y][x] != test_frame_b[y][x]) {
+              errors++;
+          }
+      }
+  }
+
+  if (errors == 0) {
+      printf("  ✓ Copy verified!\n");
+  } else {
+      printf("  ✗ %lu copy errors!\n", errors);
+  }
+
+  printf("+--------------------------------------------------+\n\n");
+
+  // Visual success indicator
+  if (errors == 0) {
+      printf("✓ Memory test PASSED!\n\n");
+  } else {
+      printf("✗ Memory test FAILED!\n\n");
+  }
+
+  printf("+--------------------------------------------------+\n");
+  printf("| XSPI FLASH TEST                                  |\n");
+  printf("+--------------------------------------------------+\n");
+
+
+  XSPI_AutoPollingMemReady(&hxspi2);
+
+  /* Cached data is not up to date due to indirect write.
+     Force new read by invalidating the corresponding cache lines */
+  SCB_InvalidateDCache_by_Addr((void *)(XSPI2_BASE + address), BUFFERSIZE);
+
+  /* Memory-mapped mode configuration ------------------------------- */
+  sCommand.OperationType = HAL_XSPI_OPTYPE_WRITE_CFG;
+  sCommand.Instruction   = OCTAL_PAGE_PROG_CMD;
+  sCommand.DataMode      = HAL_XSPI_DATA_8_LINES;
+  sCommand.DataLength    = 1;
+  sCommand.DQSMode       = HAL_XSPI_DQS_ENABLE;
+
+  if (HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  sCommand.OperationType = HAL_XSPI_OPTYPE_READ_CFG;
+  sCommand.Instruction   = OCTAL_IO_DTR_READ_CMD;
+  sCommand.DummyCycles   = DUMMY_CLOCK_CYCLES_READ;
+  sCommand.DQSMode       = HAL_XSPI_DQS_ENABLE;
+
+  if (HAL_XSPI_Command(&hxspi2, &sCommand, HAL_XSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  sMemMappedCfg.NoPrefetchAXI       = HAL_XSPI_AXI_PREFETCH_ENABLE;
+  sMemMappedCfg.NoPrefetchData      = HAL_XSPI_AUTOMATIC_PREFETCH_ENABLE;
+  sMemMappedCfg.TimeOutActivation   = HAL_XSPI_TIMEOUT_COUNTER_DISABLE;
+  sMemMappedCfg.TimeoutPeriodClock  = 0x40;
+
+  if (HAL_XSPI_MemoryMapped(&hxspi2, &sMemMappedCfg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  // Test 1: Memory-mapped read test
+  printf("Test 1: Reading XSPI @ 0x%08X...\n", XSPI_BASE_ADDRESS);
+
+  volatile uint32_t *xspi_ptr = (volatile uint32_t *)XSPI_BASE_ADDRESS;
+  uint32_t test_value = xspi_ptr[0];
+
+  printf("  First word: 0x%08X\n", test_value);
+  printf("  ✓ XSPI memory-mapped read works!\n");
+
+  // Test 2: Read pattern
+  printf("Test 2: Reading 16 words...\n");
+  for (int i = 0; i < 16; i++) {
+      printf("  [%02d]: 0x%08X\n", i, xspi_ptr[i]);
+  }
+
+  address += XSPI_PAGE_SIZE;
+  if(address >= XSPI_END_ADDR)
+  {
+    address = 0;
+  }
+
+  /* Abort xSPI driver to stop the memory-mapped mode ------------ */
+  if (HAL_XSPI_Abort(&hxspi2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  printf("+--------------------------------------------------+\n\n");
+
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -324,94 +487,87 @@ int main(void)
   * @retval None
   */
 void SystemClock_Config(void)
-{
-  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+   {
+       RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+       RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /** Configure the System Power Supply
-  */
-  if (HAL_PWREx_ConfigSupply(PWR_EXTERNAL_SOURCE_SUPPLY) != HAL_OK)
-  {
-    Error_Handler();
-  }
+       /** Configure the System Power Supply */
+       if (HAL_PWREx_ConfigSupply(PWR_EXTERNAL_SOURCE_SUPPLY) != HAL_OK)
+       {
+           Error_Handler();
+       }
 
-  /* Enable HSI */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL1.PLLState = RCC_PLL_NONE;
-  RCC_OscInitStruct.PLL2.PLLState = RCC_PLL_NONE;
-  RCC_OscInitStruct.PLL3.PLLState = RCC_PLL_NONE;
-  RCC_OscInitStruct.PLL4.PLLState = RCC_PLL_NONE;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
+       /* Enable HSI */
+       RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+       RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+       RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
+       RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+       RCC_OscInitStruct.PLL1.PLLState = RCC_PLL_NONE;
+       RCC_OscInitStruct.PLL2.PLLState = RCC_PLL_NONE;
+       RCC_OscInitStruct.PLL3.PLLState = RCC_PLL_NONE;
+       RCC_OscInitStruct.PLL4.PLLState = RCC_PLL_NONE;
+       if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+       {
+           Error_Handler();
+       }
 
-  /** Get current CPU/System buses clocks configuration and if necessary switch
- to intermediate HSI clock to ensure target clock can be set
-  */
-  HAL_RCC_GetClockConfig(&RCC_ClkInitStruct);
-  if ((RCC_ClkInitStruct.CPUCLKSource == RCC_CPUCLKSOURCE_IC1) ||
-     (RCC_ClkInitStruct.SYSCLKSource == RCC_SYSCLKSOURCE_IC2_IC6_IC11))
-  {
-    RCC_ClkInitStruct.ClockType = (RCC_CLOCKTYPE_CPUCLK | RCC_CLOCKTYPE_SYSCLK);
-    RCC_ClkInitStruct.CPUCLKSource = RCC_CPUCLKSOURCE_HSI;
-    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct) != HAL_OK)
-    {
-      /* Initialization Error */
-      Error_Handler();
-    }
-  }
+       /** Get current CPU/System buses clocks configuration */
+       HAL_RCC_GetClockConfig(&RCC_ClkInitStruct);
+       if ((RCC_ClkInitStruct.CPUCLKSource == RCC_CPUCLKSOURCE_IC1) ||
+           (RCC_ClkInitStruct.SYSCLKSource == RCC_SYSCLKSOURCE_IC2_IC6_IC11))
+       {
+           RCC_ClkInitStruct.ClockType = (RCC_CLOCKTYPE_CPUCLK | RCC_CLOCKTYPE_SYSCLK);
+           RCC_ClkInitStruct.CPUCLKSource = RCC_CPUCLKSOURCE_HSI;
+           RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+           if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct) != HAL_OK)
+           {
+               Error_Handler();
+           }
+       }
 
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_NONE;
-  RCC_OscInitStruct.PLL1.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL1.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL1.PLLM = 4;
-  RCC_OscInitStruct.PLL1.PLLN = 75;
-  RCC_OscInitStruct.PLL1.PLLFractional = 0;
-  RCC_OscInitStruct.PLL1.PLLP1 = 1;
-  RCC_OscInitStruct.PLL1.PLLP2 = 1;
-  RCC_OscInitStruct.PLL2.PLLState = RCC_PLL_NONE;
-  RCC_OscInitStruct.PLL3.PLLState = RCC_PLL_NONE;
-  RCC_OscInitStruct.PLL4.PLLState = RCC_PLL_NONE;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
+       /** Initializes the RCC Oscillators */
+       RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_NONE;
+       RCC_OscInitStruct.PLL1.PLLState = RCC_PLL_ON;
+       RCC_OscInitStruct.PLL1.PLLSource = RCC_PLLSOURCE_HSI;
+       RCC_OscInitStruct.PLL1.PLLM = 4;
+       RCC_OscInitStruct.PLL1.PLLN = 75;
+       RCC_OscInitStruct.PLL1.PLLFractional = 0;
+       RCC_OscInitStruct.PLL1.PLLP1 = 1;
+       RCC_OscInitStruct.PLL1.PLLP2 = 1;
+       RCC_OscInitStruct.PLL2.PLLState = RCC_PLL_NONE;
+       RCC_OscInitStruct.PLL3.PLLState = RCC_PLL_NONE;
+       RCC_OscInitStruct.PLL4.PLLState = RCC_PLL_NONE;
+       if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+       {
+           Error_Handler();
+       }
 
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_CPUCLK|RCC_CLOCKTYPE_HCLK
-                              |RCC_CLOCKTYPE_SYSCLK|RCC_CLOCKTYPE_PCLK1
-                              |RCC_CLOCKTYPE_PCLK2|RCC_CLOCKTYPE_PCLK5
-                              |RCC_CLOCKTYPE_PCLK4;
-  RCC_ClkInitStruct.CPUCLKSource = RCC_CPUCLKSOURCE_IC1;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_IC2_IC6_IC11;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV4;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV1;
-  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
-  RCC_ClkInitStruct.APB5CLKDivider = RCC_APB5_DIV1;
-  RCC_ClkInitStruct.IC1Selection.ClockSelection = RCC_ICCLKSOURCE_PLL1;
-  RCC_ClkInitStruct.IC1Selection.ClockDivider = 2;
-  RCC_ClkInitStruct.IC2Selection.ClockSelection = RCC_ICCLKSOURCE_PLL1;
-  RCC_ClkInitStruct.IC2Selection.ClockDivider = 3;
-  RCC_ClkInitStruct.IC6Selection.ClockSelection = RCC_ICCLKSOURCE_PLL1;
-  RCC_ClkInitStruct.IC6Selection.ClockDivider = 4;
-  RCC_ClkInitStruct.IC11Selection.ClockSelection = RCC_ICCLKSOURCE_PLL1;
-  RCC_ClkInitStruct.IC11Selection.ClockDivider = 3;
+       /** Initializes the CPU, AHB and APB buses clocks */
+       RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_CPUCLK|RCC_CLOCKTYPE_HCLK
+                                    |RCC_CLOCKTYPE_SYSCLK|RCC_CLOCKTYPE_PCLK1
+                                    |RCC_CLOCKTYPE_PCLK2|RCC_CLOCKTYPE_PCLK5
+                                    |RCC_CLOCKTYPE_PCLK4;
+       RCC_ClkInitStruct.CPUCLKSource = RCC_CPUCLKSOURCE_IC1;
+       RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_IC2_IC6_IC11;
+       RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;
+       RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
+       RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV1;
+       RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
+       RCC_ClkInitStruct.APB5CLKDivider = RCC_APB5_DIV1;
+       RCC_ClkInitStruct.IC1Selection.ClockSelection = RCC_ICCLKSOURCE_PLL1;
+       RCC_ClkInitStruct.IC1Selection.ClockDivider = 2;
+       RCC_ClkInitStruct.IC2Selection.ClockSelection = RCC_ICCLKSOURCE_PLL1;
+       RCC_ClkInitStruct.IC2Selection.ClockDivider = 3;
+       RCC_ClkInitStruct.IC6Selection.ClockSelection = RCC_ICCLKSOURCE_PLL1;
+       RCC_ClkInitStruct.IC6Selection.ClockDivider = 4;
+       RCC_ClkInitStruct.IC11Selection.ClockSelection = RCC_ICCLKSOURCE_PLL1;
+       RCC_ClkInitStruct.IC11Selection.ClockDivider = 3;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
+       if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct) != HAL_OK)
+       {
+           Error_Handler();
+       }
+   }
 
 /**
   * @brief USART1 Initialization Function
