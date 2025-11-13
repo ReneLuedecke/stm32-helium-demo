@@ -20,3 +20,21 @@ target_include_directories(app PRIVATE
 
 # Thermal SIMD module (ARM Helium MVE optimized)
 add_subdirectory(modules/thermal_simd)
+
+# ========================================
+# ARM Helium MVE Support via Compiler Flags
+# (Zephyr Kconfig does not have CONFIG_ARM_MVE_FP)
+# ========================================
+target_compile_options(app PRIVATE
+    -march=armv8.1-m.main+mve.fp+fp.dp
+    -mfpu=auto
+    -mfloat-abi=hard
+)
+
+# Optimization flags for maximum performance
+target_compile_options(app PRIVATE
+    -O3
+    -ffast-math
+    -funroll-loops
+    -ftree-vectorize
+)
