@@ -6,10 +6,14 @@ cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(xi640_zephyr_base VERSION 0.1.0)
 
-# Application sources - MINIMAL TEST
+# Application sources
 target_sources(app PRIVATE
   src/main.c
-  # Temporarily disabled for UART testing:
-  # src/thermal_frame_generator.c
-  # src/memory_manager.c
+  src/thermal_frame_generator.c
+  # memory_manager.c disabled (requires custom device tree overlay)
+)
+
+# Include directories
+target_include_directories(app PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
