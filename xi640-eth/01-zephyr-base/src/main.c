@@ -17,6 +17,16 @@
 #include "thermal_simd.h"
 
 /* ========================================
+ * GLOBAL CONTEXT AND BUFFERS
+ * ======================================== */
+/* Frame buffers (allocated from heap instead of custom memory region) */
+static thermal_frame_t frame_buffer;
+static temperature_frame_t temp_frame_buffer;
+
+/* Thermal SIMD processing context */
+static Thermal_SIMD_Context_t thermal_ctx;
+
+/* ========================================
  * CONFIGURATION
  * ======================================== */
 #define FRAME_RATE_HZ        50    /* Target: 50 FPS */
@@ -118,13 +128,6 @@ static void print_statistics(void)
 
 K_THREAD_STACK_DEFINE(capture_stack, CAPTURE_STACK_SIZE);
 static struct k_thread capture_thread_data;
-
-/* Frame buffers (allocated from heap instead of custom memory region) */
-static thermal_frame_t frame_buffer;
-static temperature_frame_t temp_frame_buffer;
-
-/* Thermal SIMD processing context */
-static Thermal_SIMD_Context_t thermal_ctx;
 
 /**
  * @brief Frame capture thread (simulates thermal sensor)
