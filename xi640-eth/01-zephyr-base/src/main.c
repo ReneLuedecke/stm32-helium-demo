@@ -13,6 +13,7 @@
 #include <zephyr/sys/printk.h>
 
 #include "thermal_frame_generator.h"
+#include "thermal_simd.h"
 
 /* ========================================
  * CONFIGURATION
@@ -89,6 +90,19 @@ static void print_statistics(void)
     printk("   Min value:         %u / 16383\n", min_adc);
     printk("   Max value:         %u / 16383\n", max_adc);
     printk("   Average:           %u\n", avg_adc);
+    printk("\n");
+
+    /* Get thermal SIMD processing stats */
+    uint32_t avg_cycles;
+    float processing_fps;
+    Thermal_SIMD_GetStats(&thermal_ctx, &avg_cycles, &processing_fps);
+
+    printk(" Thermal Processing (ARM Helium MVE):\n");
+    printk("   Avg cycles:        %u\n", avg_cycles);
+    printk("   Processing FPS:    %.1f\n", (double)processing_fps);
+    printk("   Temperature range: %.2f°C - %.2f°C\n",
+           (double)temp_frame_buffer.min_temp, (double)temp_frame_buffer.max_temp);
+    printk("   Average temp:      %.2f°C\n", (double)temp_frame_buffer.avg_temp);
     printk("============================================================\n");
     printk("\n");
 
@@ -104,8 +118,12 @@ static void print_statistics(void)
 K_THREAD_STACK_DEFINE(capture_stack, CAPTURE_STACK_SIZE);
 static struct k_thread capture_thread_data;
 
-/* Frame buffer (allocated from heap instead of custom memory region) */
+/* Frame buffers (allocated from heap instead of custom memory region) */
 static thermal_frame_t frame_buffer;
+static temperature_frame_t temp_frame_buffer;
+
+/* Thermal SIMD processing context */
+static Thermal_SIMD_Context_t thermal_ctx;
 
 /**
  * @brief Frame capture thread (simulates thermal sensor)
@@ -129,6 +147,9 @@ static void capture_thread_entry(void *p1, void *p2, void *p3)
             k_sleep(K_MSEC(FRAME_PERIOD_MS));
             continue;
         }
+
+        /* Process frame with thermal SIMD pipeline */
+        Thermal_SIMD_ProcessFrame(&thermal_ctx, &frame_buffer, &temp_frame_buffer);
 
         /* Update statistics */
         update_performance_stats(generation_time);
@@ -161,7 +182,7 @@ int main(void)
     printk("\n");
 
     /* Initialize thermal frame generator */
-    printk("[1/2] Initializing thermal frame generator...\n");
+    printk("[1/3] Initializing thermal frame generator...\n");
 
     thermal_pattern_type_t pattern = PATTERN_GRADIENT;
 
@@ -171,8 +192,22 @@ int main(void)
     }
     printk("OK - Thermal generator ready (pattern=%d)\n", pattern);
 
+    /* Initialize thermal SIMD processing pipeline */
+    printk("\n[2/3] Initializing thermal SIMD pipeline...\n");
+
+    thermal_calibration_t cal = {
+        .offset = 2048.0f,      // Dark frame offset
+        .scale = 1.0f,          // Gain correction scale
+        .t_amb = 25.0f,         // Ambient temperature
+        .emissivity = 0.95f,    // Surface emissivity
+        .use_pixel_cal = false  // Disable per-pixel calibration for now
+    };
+
+    Thermal_SIMD_Init(&thermal_ctx, &cal);
+    printk("OK - Thermal SIMD pipeline ready (ARM Helium MVE enabled)\n");
+
     /* Start frame capture thread */
-    printk("\n[2/2] Starting capture thread...\n");
+    printk("\n[3/3] Starting capture thread...\n");
     k_thread_create(&capture_thread_data, capture_stack,
                     K_THREAD_STACK_SIZEOF(capture_stack),
                     capture_thread_entry,

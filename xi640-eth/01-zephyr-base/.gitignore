@@ -6,7 +6,8 @@ twister-out*/
 # West workspace
 .west/
 zephyr/
-modules/
+modules/*
+!modules/thermal_simd/
 tools/
 bootloader/
 
