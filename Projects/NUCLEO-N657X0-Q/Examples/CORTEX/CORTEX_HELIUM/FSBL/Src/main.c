@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "xspi_nor.h"
+#include "thermal_simd.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -100,6 +101,13 @@ typedef struct {
 
 // Output interval (frames between outputs)
 #define OUTPUT_INTERVAL 100
+
+// ═══════════════════════════════════════════════════════════════════
+// THERMAL PROCESSING MODE
+// ═══════════════════════════════════════════════════════════════════
+// 0 = Original inline implementation (process_thermal_line_fastest)
+// 1 = New thermal_simd module (Thermal_SIMD_ProcessFrame)
+#define USE_THERMAL_SIMD_MODULE 1
 
 // ═══════════════════════════════════════════════════════════════════
 // SENSOR CONFIGURATION
@@ -234,6 +242,12 @@ Pipeline_Verification_t g_pipeline_track = {0};
 Performance_Breakdown_t g_perf_breakdown = {0};
 #define SAMPLE_PIXEL_X 320
 #define SAMPLE_PIXEL_Y 240
+
+// Thermal SIMD Module Context (Session 2)
+#if USE_THERMAL_SIMD_MODULE
+ThermalProcessingContext_t g_thermal_ctx = {0};
+ThermalProcessingStats_t g_thermal_stats = {0};
+#endif
 
 // XSPI Calibration Data Pointers (Memory-Mapped)
 // Memory Map:
@@ -1788,9 +1802,41 @@ void print_system_status(uint32_t fps, uint32_t frame_time_ms, float temp_c,
         // Initialize gain frame (already loaded from XSPI above)
         //init_gain_frame();  // Don't overwrite XSPI data!
 
+#if USE_THERMAL_SIMD_MODULE
+        // ═══════════════════════════════════════════════════════════════
+        // Initialize Thermal SIMD Module (Session 2)
+        // ═══════════════════════════════════════════════════════════════
+        printf("\n");
+        printf("Initializing Thermal SIMD Module...\n");
+
+        Thermal_SIMD_Init(
+            &g_thermal_ctx,
+            planck_table,
+            (const uint16_t (*)[HPIX])dark_frame,
+            (const uint16_t (*)[HPIX])gain_frame,
+            offset_line,
+            xspi_emissivity,
+            g_flag_adc
+        );
+
+        Thermal_SIMD_ResetStats(&g_thermal_stats);
+        printf("  ✓ Context initialized\n");
+        printf("  • Planck LUT:     %p (65536 entries)\n", planck_table);
+        printf("  • Dark frame:     %p (480×640)\n", dark_frame);
+        printf("  • Gain frame:     %p (480×640)\n", gain_frame);
+        printf("  • Offset line:    %p (640 values)\n", offset_line);
+        printf("  • Emissivity:     %p (480×640, XSPI)\n", xspi_emissivity);
+        printf("  • Flag ADC:       %u\n", g_flag_adc);
+#endif
+
         printf("\n");
         printf("╔═══════════════════════════════════════════════════════════╗\n");
         printf("║  System Ready - Starting Processing Loop                 ║\n");
+#if USE_THERMAL_SIMD_MODULE
+        printf("║  Using: Thermal SIMD Module (MVE optimized)              ║\n");
+#else
+        printf("║  Using: Original inline implementation                   ║\n");
+#endif
         printf("╚═══════════════════════════════════════════════════════════╝\n");
         printf("\n");
 
@@ -1832,6 +1878,20 @@ void print_system_status(uint32_t fps, uint32_t frame_time_ms, float temp_c,
         	}
 
         	// PHASE 1: Thermal Processing (KEIN printf!)
+#if USE_THERMAL_SIMD_MODULE
+        	// ═══════════════════════════════════════════════════════════════
+        	// NEW: Use Thermal SIMD Module (Session 2)
+        	// ═══════════════════════════════════════════════════════════════
+        	uint32_t thermal_cycles = Thermal_SIMD_ProcessFrameWithStats(
+        	    &g_thermal_ctx,
+        	    (const uint16_t (*)[HPIX])frame_buffer_A,
+        	    frame_buffer_B,
+        	    &g_thermal_stats
+        	);
+#else
+        	// ═══════════════════════════════════════════════════════════════
+        	// ORIGINAL: Inline implementation
+        	// ═══════════════════════════════════════════════════════════════
         	uint32_t thermal_start = DWT->CYCCNT;
 
         	for (int line = 0; line < VPIX; ++line) {
@@ -1848,7 +1908,10 @@ void print_system_status(uint32_t fps, uint32_t frame_time_ms, float temp_c,
         	    // ← HIER DARF KEIN printf() SEIN!
         	}
 
+            uint32_t thermal_cycles = DWT->CYCCNT - thermal_start;
+#endif
 
+            // Toggle LED to show activity
             if (led_state) {
                 LED1_RESET();
                 led_state = 0;
@@ -1856,8 +1919,6 @@ void print_system_status(uint32_t fps, uint32_t frame_time_ms, float temp_c,
                 LED1_SET();
                 led_state = 1;
             }
-
-            uint32_t thermal_cycles = DWT->CYCCNT - thermal_start;
 
         	// Bad Pixel Correction (KEIN printf!)
         	if (g_num_patches > 0) {
@@ -1905,7 +1966,17 @@ void print_system_status(uint32_t fps, uint32_t frame_time_ms, float temp_c,
                 printf("\n╔════════════════════════════════════════════════╗\n");
                    printf("║  PERFORMANCE BREAKDOWN                         ║\n");
                    printf("╚════════════════════════════════════════════════╝\n");
+#if USE_THERMAL_SIMD_MODULE
+                   printf("Thermal MVE: %7lu cycles (%3lu ms) - %.1f FPS\n",
+                          thermal_cycles, thermal_cycles/600000,
+                          600000000.0f / (float)thermal_cycles);
+                   printf("  • Frames:    %lu\n", g_thermal_stats.frame_count);
+                   printf("  • Avg/frame: %.1f cycles (%.3f ms)\n",
+                          g_thermal_stats.avg_cycles_per_frame,
+                          g_thermal_stats.avg_ms_per_frame);
+#else
                    printf("Thermal:     %7lu cycles (%3lu ms)\n", thermal_cycles, thermal_cycles/600000);
+#endif
                   // printf("Bad Pixel:   %7lu cycles (%3lu ms)\n", bp_cycles, bp_cycles/600000);
                    printf("ROI:         %7lu cycles (%3lu ms)\n", roi_cycles, roi_cycles/600000);
                    printf("Total:       %7lu cycles (%3lu ms) = %lu Hz\n",
