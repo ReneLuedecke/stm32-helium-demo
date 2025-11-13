@@ -1,45 +1,22 @@
 /*
  * Device tree overlay for Xi 640 ETH thermal camera
- * HyperRAM frame buffer allocation on STM32N6570-DK
+ * Simplified HyperRAM frame buffer allocation on STM32N6570-DK
+ *
+ * No 'chosen' section needed - Zephyr uses default SRAM from board DTS
  */
 
 / {
-	chosen {
-		zephyr,sram = &sram0;
-	};
-
 	soc {
-		/* HyperRAM - 64 MB external PSRAM via XSPI2 at 0x90000000 */
+		/* HyperRAM - 8 MB external PSRAM via XSPI @ 0x90000000 */
 		hyperram: memory@90000000 {
 			compatible = "zephyr,memory-region", "mmio-sram";
-			reg = <0x90000000 DT_SIZE_M(64)>;
+			reg = <0x90000000 DT_SIZE_M(8)>;
 			zephyr,memory-region = "HYPERRAM";
 		};
 	};
+};
 
-	/* Thermal frame buffer sections in HyperRAM */
-	thermal_buffers {
-		compatible = "zephyr,memory-region";
-
-		/* Raw frame buffer: 640×480×2 = 614,400 bytes at 0x90000000 */
-		raw_frame: buffer@90000000 {
-			compatible = "zephyr,memory-region";
-			reg = <0x90000000 0x96000>;  /* 614400 bytes */
-			zephyr,memory-region = "RAW_FRAME";
-		};
-
-		/* Temperature frame buffer: 640×480×4 (temps+stats) = ~1.2 MB at 0x90096000 */
-		temp_frame: buffer@90096000 {
-			compatible = "zephyr,memory-region";
-			reg = <0x90096000 0x12C000>;  /* 1228800 bytes */
-			zephyr,memory-region = "TEMP_FRAME";
-		};
-
-		/* Thermal SIMD context (Planck LUT + calibration): ~256 KB at 0x901C2000 */
-		simd_context: buffer@901C2000 {
-			compatible = "zephyr,memory-region";
-			reg = <0x901C2000 0x40000>;  /* 262144 bytes */
-			zephyr,memory-region = "SIMD_CONTEXT";
-		};
-	};
+/* Enable HyperRAM region */
+&hyperram {
+	status = "okay";
 };
