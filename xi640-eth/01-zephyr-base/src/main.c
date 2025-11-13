@@ -19,12 +19,15 @@
 /* ========================================
  * GLOBAL CONTEXT AND BUFFERS
  * ======================================== */
-/* Frame buffers (allocated from heap instead of custom memory region) */
-static thermal_frame_t frame_buffer;
-static temperature_frame_t temp_frame_buffer;
-
-/* Thermal SIMD processing context */
+/* Thermal SIMD processing context (small, can stay static) */
 static Thermal_SIMD_Context_t thermal_ctx;
+
+/* Heap for large buffers (2 MB total for frame buffers) */
+K_HEAP_DEFINE(thermal_heap, 2 * 1024 * 1024);
+
+/* Pointers to heap-allocated buffers (allocated in main()) */
+static thermal_frame_t *frame_buffer = NULL;
+static temperature_frame_t *temp_frame_buffer = NULL;
 
 /* ========================================
  * CONFIGURATION
@@ -112,8 +115,8 @@ static void print_statistics(void)
     printk("   Avg cycles:        %u\n", avg_cycles);
     printk("   Processing FPS:    %.1f\n", (double)processing_fps);
     printk("   Temperature range: %.2f°C - %.2f°C\n",
-           (double)temp_frame_buffer.min_temp, (double)temp_frame_buffer.max_temp);
-    printk("   Average temp:      %.2f°C\n", (double)temp_frame_buffer.avg_temp);
+           (double)temp_frame_buffer->min_temp, (double)temp_frame_buffer->max_temp);
+    printk("   Average temp:      %.2f°C\n", (double)temp_frame_buffer->avg_temp);
     printk("============================================================\n");
     printk("\n");
 
@@ -143,7 +146,7 @@ static void capture_thread_entry(void *p1, void *p2, void *p3)
     while (1) {
         /* Generate synthetic thermal frame */
         uint64_t start_time = k_uptime_get();
-        int ret = thermal_generator_create_frame(&frame_buffer);
+        int ret = thermal_generator_create_frame(frame_buffer);
         uint64_t generation_time = k_uptime_get() - start_time;
 
         if (ret < 0) {
@@ -153,7 +156,7 @@ static void capture_thread_entry(void *p1, void *p2, void *p3)
         }
 
         /* Process frame with thermal SIMD pipeline */
-        Thermal_SIMD_ProcessFrame(&thermal_ctx, &frame_buffer, &temp_frame_buffer);
+        Thermal_SIMD_ProcessFrame(&thermal_ctx, frame_buffer, temp_frame_buffer);
 
         /* Update statistics */
         update_performance_stats(generation_time);
@@ -185,8 +188,29 @@ int main(void)
     printk("============================================================\n");
     printk("\n");
 
+    /* Allocate large buffers from heap (prevents RAM overflow) */
+    printk("[0/4] Allocating frame buffers from heap...\n");
+
+    frame_buffer = k_heap_alloc(&thermal_heap, sizeof(thermal_frame_t), K_NO_WAIT);
+    if (!frame_buffer) {
+        printk("FATAL: Failed to allocate frame_buffer (%zu bytes)\n", sizeof(thermal_frame_t));
+        return -1;
+    }
+
+    temp_frame_buffer = k_heap_alloc(&thermal_heap, sizeof(temperature_frame_t), K_NO_WAIT);
+    if (!temp_frame_buffer) {
+        printk("FATAL: Failed to allocate temp_frame_buffer (%zu bytes)\n", sizeof(temperature_frame_t));
+        k_heap_free(&thermal_heap, frame_buffer);
+        return -1;
+    }
+
+    printk("OK - Buffers allocated: %zu bytes total\n",
+           sizeof(thermal_frame_t) + sizeof(temperature_frame_t));
+    printk("   frame_buffer:      %zu bytes\n", sizeof(thermal_frame_t));
+    printk("   temp_frame_buffer: %zu bytes\n", sizeof(temperature_frame_t));
+
     /* Initialize thermal frame generator */
-    printk("[1/3] Initializing thermal frame generator...\n");
+    printk("\n[1/4] Initializing thermal frame generator...\n");
 
     thermal_pattern_type_t pattern = PATTERN_GRADIENT;
 
@@ -197,7 +221,7 @@ int main(void)
     printk("OK - Thermal generator ready (pattern=%d)\n", pattern);
 
     /* Initialize thermal SIMD processing pipeline */
-    printk("\n[2/3] Initializing thermal SIMD pipeline...\n");
+    printk("\n[2/4] Initializing thermal SIMD pipeline...\n");
 
     thermal_calibration_t cal = {
         .offset = 2048.0f,      // Dark frame offset
@@ -211,7 +235,7 @@ int main(void)
     printk("OK - Thermal SIMD pipeline ready (ARM Helium MVE enabled)\n");
 
     /* Start frame capture thread */
-    printk("\n[3/3] Starting capture thread...\n");
+    printk("\n[3/4] Starting capture thread...\n");
     k_thread_create(&capture_thread_data, capture_stack,
                     K_THREAD_STACK_SIZEOF(capture_stack),
                     capture_thread_entry,
@@ -220,14 +244,16 @@ int main(void)
     k_thread_name_set(&capture_thread_data, "capture");
     printk("OK - Capture thread started\n");
 
+    /* Initialize statistics timer */
+    printk("\n[4/4] Initializing statistics timer...\n");
+    perf_stats.last_stats_time = k_uptime_get();
+    printk("OK - Statistics timer initialized\n");
+
     printk("\n");
     printk("============================================================\n");
     printk(" SYSTEM READY - Generating thermal frames @ %d FPS\n", FRAME_RATE_HZ);
     printk("============================================================\n");
     printk("\n");
-
-    /* Initialize statistics timer */
-    perf_stats.last_stats_time = k_uptime_get();
 
     /* Main thread becomes idle */
     while (1) {

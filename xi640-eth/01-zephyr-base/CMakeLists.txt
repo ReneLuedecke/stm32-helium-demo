@@ -22,6 +22,9 @@ target_include_directories(app PRIVATE
 # Thermal SIMD module (ARM Helium MVE optimized)
 add_subdirectory(modules/thermal_simd)
 
+# Link thermal_simd library to fix undefined references
+target_link_libraries(app PRIVATE thermal_simd)
+
 # ========================================
 # ARM Helium MVE Support via Compiler Flags
 # (Zephyr Kconfig does not have CONFIG_ARM_MVE_FP)
