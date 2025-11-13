@@ -20,7 +20,7 @@ int main(void)
     printk("==========================================================\n");
     printk("  Xi 640 ETH - UART TEST\n");
     printk("  Board: STM32N6570-DK\n");
-    printk("  Zephyr: %s\n", KERNEL_VERSION_STRING);
+    printk("  Build: " __DATE__ " " __TIME__ "\n");
     printk("==========================================================\n");
     printk("\n");
 
