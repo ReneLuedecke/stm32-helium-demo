@@ -42,3 +42,6 @@ target_compile_options(app PRIVATE
     -funroll-loops
     -ftree-vectorize
 )
+
+# Custom linker sections for HyperRAM frame buffers
+zephyr_linker_sources(SECTIONS sections.ld)
