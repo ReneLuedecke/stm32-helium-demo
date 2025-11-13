@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  zephyr-dev:
+    build: .
+    image: xi640-zephyr:latest
+    container_name: xi640-zephyr-dev
+    volumes:
+      - .:/workspace
+      - zephyr-modules:/workspace/.west
+      - zephyr-build:/workspace/build
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+volumes:
+  zephyr-modules:
+  zephyr-build:
+
+# Usage:
+#   docker-compose build    # Build container
+#   docker-compose run --rm zephyr-dev    # Start interactive session
+#
+# Inside container:
+#   west init -l .
+#   west update
+#   west build -b native_sim
+#   ./build/zephyr/zephyr.exe
