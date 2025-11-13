@@ -1,0 +1,20 @@
+# West manifest for Xi 640 ETH Thermal Camera
+# Zephyr 3.7 LTS base configuration
+manifest:
+  version: "0.13"
+
+  defaults:
+    remote: zephyrproject-rtos
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v3.7.0
+      import: true
+
+  self:
+    path: xi640-base

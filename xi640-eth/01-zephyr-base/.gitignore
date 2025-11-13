@@ -1,0 +1,27 @@
+# Zephyr build artifacts
+build/
+build-*/
+twister-out*/
+
+# West workspace
+.west/
+zephyr/
+modules/
+tools/
+bootloader/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# System files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,76 @@
+# Xi 640 ETH Thermal Camera Configuration
+
+mainmenu "Xi 640 ETH Thermal Camera"
+
+config THERMAL_HPIX
+    int "Thermal sensor horizontal resolution"
+    default 640
+    help
+      Horizontal pixel count for thermal sensor
+
+config THERMAL_VPIX
+    int "Thermal sensor vertical resolution"
+    default 480
+    help
+      Vertical pixel count for thermal sensor
+
+config THERMAL_BIT_DEPTH
+    int "Thermal sensor ADC bit depth"
+    default 14
+    range 12 16
+    help
+      ADC resolution in bits (12, 14, or 16-bit)
+
+config THERMAL_FRAME_RATE
+    int "Target frame rate (Hz)"
+    default 50
+    help
+      Simulated thermal sensor frame rate (VSYNC frequency)
+      Will be increased to 125-160 FPS in later sessions
+
+config THERMAL_FRAME_POOL_COUNT
+    int "Number of frame buffers"
+    default 3
+    range 2 5
+    help
+      Triple buffering (current + processing + display)
+
+config THERMAL_CALIBRATION_ENABLE
+    bool "Enable calibration data storage"
+    default y
+    help
+      Store dark frame, gain, and offset calibration in HyperFlash
+
+config THERMAL_SYNTHETIC_MODE
+    bool "Use synthetic frame generator (no physical camera)"
+    default y
+    help
+      Generate test patterns instead of reading from DCMIPP
+      Useful for development without hardware
+
+choice THERMAL_TEST_PATTERN
+    prompt "Synthetic test pattern"
+    default THERMAL_PATTERN_GRADIENT
+    depends on THERMAL_SYNTHETIC_MODE
+
+config THERMAL_PATTERN_GRADIENT
+    bool "Linear gradient (cold to hot)"
+
+config THERMAL_PATTERN_HOTSPOT
+    bool "Central hot spot with decay"
+
+config THERMAL_PATTERN_CHECKERBOARD
+    bool "Checkerboard thermal pattern"
+
+config THERMAL_PATTERN_NOISE
+    bool "Random thermal noise"
+
+endchoice
+
+config THERMAL_HOTSPOT_COUNT
+    int "Number of hot spots in pattern"
+    default 3
+    range 1 10
+    depends on THERMAL_PATTERN_HOTSPOT
+
+source "Kconfig.zephyr"

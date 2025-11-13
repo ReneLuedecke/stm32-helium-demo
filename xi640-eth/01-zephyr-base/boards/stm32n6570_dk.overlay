@@ -1,0 +1,212 @@
+/*
+ * Device Tree Overlay for Xi 640 ETH Thermal Camera
+ * Board: STM32N6570-DK
+ * Target: 640×480 @ 14-bit thermal sensor via DCMIPP
+ */
+
+/ {
+    model = "STMicroelectronics STM32N6570-DK + Xi 640 Thermal Sensor";
+
+    aliases {
+        thermal-dcmipp = &dcmipp;
+        thermal-dma = &dma1;
+        led0 = &green_led_1;
+    };
+
+    chosen {
+        zephyr,console = &usart1;
+        zephyr,shell-uart = &usart1;
+        zephyr,sram = &sram0;
+        zephyr,flash = &flash0;
+        zephyr,code-partition = &slot0_partition;
+    };
+
+    /* Memory regions for thermal processing pipeline */
+    soc {
+        /* AXISRAM1: 1MB @ 0x24000000 - High-speed DMA buffer */
+        axisram1: memory@24000000 {
+            compatible = "zephyr,memory-region", "mmio-sram";
+            reg = <0x24000000 DT_SIZE_M(1)>;
+            zephyr,memory-region = "AXISRAM1";
+            zephyr,memory-attr = <( DT_MEM_ARM(ATTR_MPU_RAM_NOCACHE) )>;
+        };
+
+        /* AXISRAM2: 1MB @ 0x24100000 - Processing buffers */
+        axisram2: memory@24100000 {
+            compatible = "zephyr,memory-region", "mmio-sram";
+            reg = <0x24100000 DT_SIZE_M(1)>;
+            zephyr,memory-region = "AXISRAM2";
+            zephyr,memory-attr = <( DT_MEM_ARM(ATTR_MPU_RAM) )>;
+        };
+
+        /* AXISRAM3: 1MB @ 0x24200000 - Calibration data */
+        axisram3: memory@24200000 {
+            compatible = "zephyr,memory-region", "mmio-sram";
+            reg = <0x24200000 DT_SIZE_M(1)>;
+            zephyr,memory-region = "AXISRAM3";
+            zephyr,memory-attr = <( DT_MEM_ARM(ATTR_MPU_RAM) )>;
+        };
+    };
+
+    /* HyperRAM framebuffer pool (memory-mapped via XSPI1) */
+    hyperram: hyperram@90000000 {
+        compatible = "zephyr,memory-region";
+        reg = <0x90000000 DT_SIZE_M(64)>;
+        zephyr,memory-region = "HYPERRAM";
+        status = "okay";
+
+        framebuffer_pool: framebuffer-pool {
+            compatible = "zephyr,memory-pool";
+            /* 3 × (640×480×2 bytes) = 1.84 MB for frame triple-buffering */
+            reg = <0x90000000 0x001D0000>;
+        };
+    };
+
+    /* HyperFlash calibration storage (via XSPI2) */
+    hyperflash: hyperflash@70000000 {
+        compatible = "zephyr,memory-region";
+        reg = <0x70000000 DT_SIZE_M(128)>;
+        zephyr,memory-region = "HYPERFLASH";
+        status = "okay";
+
+        calibration_data: calibration-partition@0 {
+            compatible = "soc-nv-flash";
+            reg = <0x70000000 0x00200000>; /* 2 MB for calibration */
+            write-block-size = <256>;
+            erase-block-size = <4096>;
+        };
+    };
+
+    /* Thermal frame buffer definitions */
+    thermal {
+        compatible = "optris,xi640-thermal";
+        status = "okay";
+
+        frame-width = <640>;
+        frame-height = <480>;
+        bit-depth = <14>;
+        frame-rate = <50>; /* Initial target, will scale to 160 FPS */
+
+        /* Memory allocation strategy */
+        dma-buffer = <&axisram1>;
+        processing-buffer = <&axisram2>;
+        calibration-buffer = <&axisram3>;
+        framebuffer-pool = <&framebuffer_pool>;
+
+        /* Temperature conversion parameters */
+        adc-min = <0>;
+        adc-max = <16383>; /* 14-bit max */
+        temp-min = <(-40)>; /* -40°C */
+        temp-max = <1200>;  /* 1200°C */
+
+        /* Linear mapping: T = (ADC - offset) * scale */
+        temp-offset = <8192>;
+        temp-scale-numerator = <1240>;
+        temp-scale-denominator = <16384>;
+    };
+};
+
+/* DCMIPP: Digital Camera Interface (parallel 14-bit) */
+&dcmipp {
+    status = "okay";
+    pinctrl-0 = <&dcmipp_default>;
+    pinctrl-names = "default";
+
+    /* Parallel interface configuration */
+    bus-width = <14>;
+    hsync-active = <0>;
+    vsync-active = <0>;
+    pixelclk-active = <1>;
+
+    /* 640×480 thermal sensor timing */
+    port {
+        dcmipp_in: endpoint {
+            remote-endpoint = <&thermal_sensor_out>;
+            bus-type = <5>; /* Parallel */
+            bus-width = <14>;
+            data-shift = <0>;
+            hsync-active = <0>;
+            vsync-active = <0>;
+            pclk-sample = <1>;
+        };
+    };
+};
+
+/* DMA for DCMIPP frame capture */
+&dma1 {
+    status = "okay";
+
+    /* Channel for DCMIPP → AXISRAM1 transfer */
+    thermal_dma: dma-channel@0 {
+        compatible = "st,stm32-dma-v2";
+        reg = <0>;
+        interrupts = <11 0>;
+        st,mem2mem;
+        dma-buf-addr-alignment = <64>; /* Cache line alignment */
+        dma-buf-size-alignment = <64>;
+        dma-copy-alignment = <64>;
+    };
+};
+
+/* XSPI1: HyperRAM interface */
+&xspi1 {
+    status = "okay";
+    pinctrl-0 = <&xspi1_default>;
+    pinctrl-names = "default";
+
+    hyperram_device: hyperram@0 {
+        compatible = "cypress,hyperram";
+        reg = <0>;
+        spi-max-frequency = <100000000>; /* 100 MHz */
+        size = <DT_SIZE_M(64)>;
+    };
+};
+
+/* XSPI2: HyperFlash interface */
+&xspi2 {
+    status = "okay";
+    pinctrl-0 = <&xspi2_default>;
+    pinctrl-names = "default";
+
+    hyperflash_device: hyperflash@0 {
+        compatible = "cypress,hyperflash";
+        reg = <0>;
+        spi-max-frequency = <100000000>; /* 100 MHz */
+        size = <DT_SIZE_M(128)>;
+    };
+};
+
+/* USART1: Console/Debug output */
+&usart1 {
+    status = "okay";
+    pinctrl-0 = <&usart1_tx_pa9 &usart1_rx_pa10>;
+    pinctrl-names = "default";
+    current-speed = <115200>;
+};
+
+/* Status LED */
+&green_led_1 {
+    status = "okay";
+    gpios = <&gpiog 8 GPIO_ACTIVE_HIGH>;
+};
+
+/* System clocks @ 150 MHz */
+&clk_hse {
+    clock-frequency = <DT_FREQ_M(24)>; /* External 24 MHz oscillator */
+    status = "okay";
+};
+
+&pll1 {
+    status = "okay";
+    div-m = <3>;
+    mul-n = <75>;
+    div-p = <2>;
+    div-q = <4>;
+    div-r = <4>;
+    clocks = <&clk_hse>;
+};
+
+&rcc {
+    clocks = <&pll1>;
+    clock-frequency = <DT_FREQ_M(150)>;
+};
