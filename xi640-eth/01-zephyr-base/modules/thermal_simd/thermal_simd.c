@@ -59,6 +59,11 @@ static inline void process_line_mve(const uint16_t *raw_line,
                                      float scale,
                                      int line_width)
 {
+    // Bounds check to prevent undefined behavior
+    if (line_width > HPIX) {
+        line_width = HPIX;
+    }
+
     int i = 0;
 
     // Process 8 pixels per iteration with MVE
@@ -141,7 +146,7 @@ void Thermal_SIMD_ProcessFrame(Thermal_SIMD_Context_t *ctx,
         int16x8_t temps = vld1q_s16(&temp_frame->temps[i]);
         min_val = (int16_t)vminvq_s16(min_val, temps);
         max_val = (int16_t)vmaxvq_s16(max_val, temps);
-        sum += vaddlvq_s16(temps);
+        sum += (int64_t)vaddvq_s16(temps);
     }
 
     temp_frame->min_temp = min_val / 100.0f;
