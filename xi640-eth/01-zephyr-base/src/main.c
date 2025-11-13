@@ -1,36 +1,22 @@
-/**
- * @file main.c
- * @brief Xi 640 ETH - Session 1: Minimal UART Test
- *
- * MINIMAL VERSION: Test if UART console works at all
+/*
+ * Copyright (c) 2025 Xi 640 ETH Project
+ * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdio.h>
 #include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
-#include <zephyr/drivers/uart.h>
 
 int main(void)
 {
-    int counter = 0;
+	printf("Hello World! Xi 640 ETH - STM32N6570-DK\n");
+	printf("UART Test - If you see this, it works!\n");
+	printf("\n");
 
-    /* Wait a bit for UART to be ready */
-    k_msleep(100);
+	int counter = 0;
+	while (1) {
+		printf("Counter: %d\n", counter++);
+		k_sleep(K_SECONDS(1));
+	}
 
-    printk("\n\n");
-    printk("==========================================================\n");
-    printk("  Xi 640 ETH - UART TEST\n");
-    printk("  Board: STM32N6570-DK\n");
-    printk("  Build: " __DATE__ " " __TIME__ "\n");
-    printk("==========================================================\n");
-    printk("\n");
-
-    printk("If you see this, UART is working!\n");
-    printk("\n");
-
-    while (1) {
-        printk("Counter: %d\n", counter++);
-        k_msleep(1000);
-    }
-
-    return 0;
+	return 0;
 }
