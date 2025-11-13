@@ -125,8 +125,8 @@ void Thermal_SIMD_ProcessFrame(Thermal_SIMD_Context_t *ctx,
     uint32_t start_cycles = k_cycle_get_32();
 
     // Copy metadata
-    temp_frame->timestamp = raw_frame->timestamp;
-    temp_frame->frame_id = raw_frame->frame_id;
+    temp_frame->timestamp = raw_frame->timestamp_us;
+    temp_frame->frame_id = raw_frame->frame_number;
 
     // Process all lines with MVE
     for (int y = 0; y < VPIX; y++) {
@@ -161,8 +161,8 @@ void Thermal_SIMD_ProcessFrame(Thermal_SIMD_Context_t *ctx,
 
 void generate_synthetic_frame(thermal_frame_t *frame, uint32_t frame_id)
 {
-    frame->frame_id = frame_id;
-    frame->timestamp = k_cycle_get_32();
+    frame->frame_number = frame_id;
+    frame->timestamp_us = k_cycle_get_32();
 
     // Generate test pattern: radial gradient with hot spot
     int cx = HPIX / 2;

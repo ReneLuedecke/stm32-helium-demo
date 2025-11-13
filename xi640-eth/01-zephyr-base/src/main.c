@@ -12,6 +12,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "thermal_types.h"           /* Common thermal frame types (include first!) */
 #include "thermal_frame_generator.h"
 #include "thermal_simd.h"
 

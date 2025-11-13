@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <arm_mve.h>
+#include "../../src/thermal_types.h"  /* Common thermal frame type definitions */
 
 /* Xi 640 ETH sensor specifications */
 #define HPIX 640
@@ -28,26 +29,7 @@
 #define FLOAT_TO_Q15(x) ((int16_t)((x) * Q15_SCALE))
 #define Q15_TO_FLOAT(x) (((float)(x)) / Q15_SCALE)
 
-/**
- * @brief Raw thermal frame from sensor (14-bit ADC values)
- */
-typedef struct {
-    uint16_t pixels[FRAME_SIZE];
-    uint32_t timestamp;
-    uint32_t frame_id;
-} thermal_frame_t;
-
-/**
- * @brief Processed temperature frame (Celsius * 100)
- */
-typedef struct {
-    int16_t temps[FRAME_SIZE];  // Temperature in 0.01°C units
-    float min_temp;
-    float max_temp;
-    float avg_temp;
-    uint32_t timestamp;
-    uint32_t frame_id;
-} temperature_frame_t;
+/* thermal_frame_t and temperature_frame_t are defined in thermal_types.h */
 
 /**
  * @brief Calibration parameters for thermal processing

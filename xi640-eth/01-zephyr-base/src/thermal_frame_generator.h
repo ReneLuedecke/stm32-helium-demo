@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "thermal_types.h"  /* Common thermal frame type definitions */
 
 /* Frame dimensions */
 #define THERMAL_WIDTH  640
@@ -26,12 +27,7 @@
 #define THERMAL_ADC_MIN 0
 #define THERMAL_ADC_MAX 16383
 
-/* Frame buffer: 640×480×2 bytes = 614,400 bytes */
-typedef struct {
-    uint16_t pixels[THERMAL_PIXELS];
-    uint32_t frame_number;
-    uint64_t timestamp_us;
-} thermal_frame_t;
+/* thermal_frame_t is defined in thermal_types.h */
 
 /* Test pattern types */
 typedef enum {
