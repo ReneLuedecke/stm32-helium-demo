@@ -1,5 +1,5 @@
 # West manifest for Xi 640 ETH Thermal Camera
-# Zephyr 3.7 LTS base configuration
+# Zephyr main branch (includes STM32N6570-DK support)
 manifest:
   version: "0.13"
 
@@ -13,7 +13,7 @@ manifest:
   projects:
     - name: zephyr
       remote: zephyrproject-rtos
-      revision: v3.7.0
+      revision: main
       import: true
 
   self:
