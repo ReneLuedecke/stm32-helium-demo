@@ -1,22 +1,22 @@
 /*
  * Device tree overlay for Xi 640 ETH thermal camera
- * Simplified HyperRAM frame buffer allocation on STM32N6570-DK
+ * HyperRAM external memory configuration for STM32N6570-DK
  *
- * No 'chosen' section needed - Zephyr uses default SRAM from board DTS
+ * Defines zephyr,extram chosen node for __extram attribute support
  */
 
 / {
+	chosen {
+		zephyr,extram = &hyperram;
+	};
+
 	soc {
 		/* HyperRAM - 8 MB external PSRAM via XSPI @ 0x90000000 */
 		hyperram: memory@90000000 {
 			compatible = "zephyr,memory-region", "mmio-sram";
 			reg = <0x90000000 DT_SIZE_M(8)>;
-			zephyr,memory-region = "HYPERRAM";
+			zephyr,memory-region = "EXTRAM";
+			zephyr,memory-attr = <( DT_MEM_ARM_MPU_RAM )>;
 		};
 	};
-};
-
-/* Enable HyperRAM region */
-&hyperram {
-	status = "okay";
 };

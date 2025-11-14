@@ -11,21 +11,25 @@
 #include <stdio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/sys/mem_attr.h>
 
 #include "thermal_types.h"           /* Common thermal frame types (include first!) */
 #include "thermal_frame_generator.h"
 #include "thermal_simd.h"
 
+/* Memory attribute for external RAM (HyperRAM) */
+#define __extram __attribute__((__section__(".extram")))
+
 /* ========================================
  * GLOBAL CONTEXT AND BUFFERS
  * ======================================== */
 /*
- * Large buffers automatically placed in external HyperRAM by Zephyr
- * when CONFIG_STM32_MEMMAP=y is enabled. No custom linker sections needed!
+ * Large buffers placed in external HyperRAM using __extram attribute.
+ * Requires CONFIG_STM32_MEMMAP=y and devicetree chosen zephyr,extram.
  */
-static thermal_frame_t frame_buffer;
-static temperature_frame_t temp_frame_buffer;
-static Thermal_SIMD_Context_t thermal_ctx;
+__extram static thermal_frame_t frame_buffer;
+__extram static temperature_frame_t temp_frame_buffer;
+static Thermal_SIMD_Context_t thermal_ctx;  /* Small, stays in internal RAM */
 
 /* ========================================
  * CONFIGURATION
