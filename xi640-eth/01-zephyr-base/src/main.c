@@ -21,10 +21,15 @@
  * GLOBAL CONTEXT AND BUFFERS
  * ======================================== */
 /* Place large buffers in external RAM */
-#define __extram __MEM_ATTR_EXTRAM
 
-__extram static thermal_frame_t frame_buffer;
-__extram static temperature_frame_t temp_frame_buffer;
+#ifndef __extram
+#define __extram __attribute__((section(".psram_data")))
+#endif
+
+
+static __extram  thermal_frame_t frame_buffer;
+static __extram  temperature_frame_t temp_frame_buffer;
+
 static Thermal_SIMD_Context_t thermal_ctx;  /* Small, stays in internal RAM */
 
 /* ========================================

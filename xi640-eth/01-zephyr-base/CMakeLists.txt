@@ -42,3 +42,5 @@ target_compile_options(app PRIVATE
     -funroll-loops
     -ftree-vectorize
 )
+# Linker-Fragment für PSRAM-Daten
+zephyr_linker_sources(SECTIONS linker_psram_data.ld)
