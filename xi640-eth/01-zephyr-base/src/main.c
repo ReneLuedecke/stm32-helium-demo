@@ -19,11 +19,12 @@
 /* ========================================
  * GLOBAL CONTEXT AND BUFFERS
  * ======================================== */
-/* Place large buffers in external HyperRAM to avoid RAM overflow */
-static thermal_frame_t frame_buffer __attribute__((section(".hyperram")));
-static temperature_frame_t temp_frame_buffer __attribute__((section(".hyperram")));
-
-/* Thermal SIMD processing context (in internal RAM) */
+/*
+ * Large buffers automatically placed in external HyperRAM by Zephyr
+ * when CONFIG_STM32_MEMMAP=y is enabled. No custom linker sections needed!
+ */
+static thermal_frame_t frame_buffer;
+static temperature_frame_t temp_frame_buffer;
 static Thermal_SIMD_Context_t thermal_ctx;
 
 /* ========================================
