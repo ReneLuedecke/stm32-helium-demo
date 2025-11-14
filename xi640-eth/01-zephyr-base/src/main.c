@@ -11,24 +11,20 @@
 #include <stdio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
-#include <zephyr/sys/mem_attr.h>
 
 #include "thermal_types.h"           /* Common thermal frame types (include first!) */
 #include "thermal_frame_generator.h"
 #include "thermal_simd.h"
 
-/* Memory attribute for external RAM (HyperRAM) */
-#define __extram __attribute__((__section__(".extram")))
-
 /* ========================================
  * GLOBAL CONTEXT AND BUFFERS
  * ======================================== */
-/*
- * Large buffers placed in external HyperRAM using __extram attribute.
- * Requires CONFIG_STM32_MEMMAP=y and devicetree chosen zephyr,extram.
- */
-__extram static thermal_frame_t frame_buffer;
-__extram static temperature_frame_t temp_frame_buffer;
+/* Large buffer heap (2 MB) for frame buffers */
+K_HEAP_DEFINE(frame_heap, 2 * 1024 * 1024);
+
+/* Use pointers for large buffers */
+static thermal_frame_t *frame_buffer = NULL;
+static temperature_frame_t *temp_frame_buffer = NULL;
 static Thermal_SIMD_Context_t thermal_ctx;  /* Small, stays in internal RAM */
 
 /* ========================================
@@ -117,8 +113,8 @@ static void print_statistics(void)
     printk("   Avg cycles:        %u\n", avg_cycles);
     printk("   Processing FPS:    %.1f\n", (double)processing_fps);
     printk("   Temperature range: %.2f°C - %.2f°C\n",
-           (double)temp_frame_buffer.min_temp, (double)temp_frame_buffer.max_temp);
-    printk("   Average temp:      %.2f°C\n", (double)temp_frame_buffer.avg_temp);
+           (double)temp_frame_buffer->min_temp, (double)temp_frame_buffer->max_temp);
+    printk("   Average temp:      %.2f°C\n", (double)temp_frame_buffer->avg_temp);
     printk("============================================================\n");
     printk("\n");
 
@@ -148,7 +144,7 @@ static void capture_thread_entry(void *p1, void *p2, void *p3)
     while (1) {
         /* Generate synthetic thermal frame */
         uint64_t start_time = k_uptime_get();
-        int ret = thermal_generator_create_frame(&frame_buffer);
+        int ret = thermal_generator_create_frame(frame_buffer);
         uint64_t generation_time = k_uptime_get() - start_time;
 
         if (ret < 0) {
@@ -158,7 +154,7 @@ static void capture_thread_entry(void *p1, void *p2, void *p3)
         }
 
         /* Process frame with thermal SIMD pipeline */
-        Thermal_SIMD_ProcessFrame(&thermal_ctx, &frame_buffer, &temp_frame_buffer);
+        Thermal_SIMD_ProcessFrame(&thermal_ctx, frame_buffer, temp_frame_buffer);
 
         /* Update statistics */
         update_performance_stats(generation_time);
@@ -190,12 +186,34 @@ int main(void)
     printk("============================================================\n");
     printk("\n");
 
-    /* Frame buffers are placed in external HyperRAM via linker section */
-    printk("[0/3] Frame buffers: HyperRAM @ 0x90000000\n");
-    printk("   frame_buffer:      %zu bytes (HyperRAM)\n", sizeof(thermal_frame_t));
-    printk("   temp_frame_buffer: %zu bytes (HyperRAM)\n", sizeof(temperature_frame_t));
-    printk("   Total external:    %zu bytes\n",
-           sizeof(thermal_frame_t) + sizeof(temperature_frame_t));
+    /* Allocate large frame buffers from heap */
+    printk("[0/3] Allocating frame buffers...\n");
+
+    frame_buffer = k_heap_alloc(&frame_heap,
+                                sizeof(thermal_frame_t),
+                                K_NO_WAIT);
+    if (!frame_buffer) {
+        printk("ERROR: Failed to allocate frame_buffer (%zu bytes)\n",
+               sizeof(thermal_frame_t));
+        return -1;
+    }
+
+    temp_frame_buffer = k_heap_alloc(&frame_heap,
+                                     sizeof(temperature_frame_t),
+                                     K_NO_WAIT);
+    if (!temp_frame_buffer) {
+        printk("ERROR: Failed to allocate temp_frame_buffer (%zu bytes)\n",
+               sizeof(temperature_frame_t));
+        k_heap_free(&frame_heap, frame_buffer);
+        return -1;
+    }
+
+    printk("OK - Frame buffers allocated:\n");
+    printk("   Raw frame:  %zu bytes\n", sizeof(thermal_frame_t));
+    printk("   Temp frame: %zu bytes\n", sizeof(temperature_frame_t));
+    printk("   Total:      %zu bytes (%.1f MB)\n\n",
+           sizeof(thermal_frame_t) + sizeof(temperature_frame_t),
+           (sizeof(thermal_frame_t) + sizeof(temperature_frame_t)) / 1048576.0);
 
     /* Initialize thermal frame generator */
     printk("\n[1/3] Initializing thermal frame generator...\n");

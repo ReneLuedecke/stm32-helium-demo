@@ -59,9 +59,9 @@ static inline void process_line_mve(const uint16_t *raw_line,
                                      float scale,
                                      int line_width)
 {
-    // Bounds check to prevent undefined behavior
-    if (line_width > HPIX) {
-        line_width = HPIX;
+    // Prevent undefined behavior - explicit bounds check
+    if (line_width > 640) {
+        line_width = 640;
     }
 
     int i = 0;
