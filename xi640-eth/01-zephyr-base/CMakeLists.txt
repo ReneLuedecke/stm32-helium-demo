@@ -1,29 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
-# Xi 640 ETH Thermal Camera - Session 1: Zephyr Base + Synthetic Frame Generator
+# Xi 640 ETH - Minimal Boot Test
 
 cmake_minimum_required(VERSION 3.20.0)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(xi640_zephyr_base VERSION 0.1.0)
+project(xi640_eth_minimal VERSION 0.1.0)
 
-# Application sources
+# Application sources - minimal test only
 target_sources(app PRIVATE
-  src/main.c
-  src/thermal_frame_generator.c
-  # memory_manager.c disabled (requires custom device tree overlay)
+    src/main.c
 )
 
-# Include directories
-target_include_directories(app PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/modules/thermal_simd
-)
-
-# Thermal SIMD module (ARM Helium MVE optimized)
-add_subdirectory(modules/thermal_simd)
-
-# Link thermal_simd library to fix undefined references
-target_link_libraries(app PRIVATE thermal_simd)
+# Temporarily disabled for minimal test
+# target_sources(app PRIVATE src/thermal_frame_generator.c)
+# target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/modules/thermal_simd)
+# add_subdirectory(modules/thermal_simd)
+# target_link_libraries(app PRIVATE thermal_simd)
 
 # ========================================
 # ARM Helium MVE Support via Compiler Flags
