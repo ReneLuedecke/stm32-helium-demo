@@ -21,15 +21,13 @@
  * GLOBAL CONTEXT AND BUFFERS
  * ======================================== */
 /* Place large buffers in external RAM */
-
 #ifndef __extram
 #define __extram __attribute__((section(".psram_data")))
 #endif
 
-
-static __extram  thermal_frame_t frame_buffer;
-static __extram  temperature_frame_t temp_frame_buffer;
-
+/* Place large buffers in PSRAM (NOT on stack!) */
+static __extram thermal_frame_t frame_buffer;
+static __extram temperature_frame_t temp_frame_buffer;
 static Thermal_SIMD_Context_t thermal_ctx;  /* Small, stays in internal RAM */
 
 /* ========================================
@@ -179,7 +177,35 @@ static void capture_thread_entry(void *p1, void *p2, void *p3)
  * ======================================== */
 int main(void)
 {
+    /* Force early UART output */
+    k_msleep(100);
+
+    printk("\n\n\n");
+    printk("========================================\n");
+    printk("Xi 640 ETH - BOOT START\n");
+    printk("========================================\n");
+    printk("Build: %s %s\n", __DATE__, __TIME__);
     printk("\n");
+
+    printk("Frame buffer size: %zu bytes\n", sizeof(thermal_frame_t));
+    printk("Temp buffer size: %zu bytes\n", sizeof(temperature_frame_t));
+    printk("Total buffers: %zu bytes (%.1f MB)\n",
+           sizeof(thermal_frame_t) + sizeof(temperature_frame_t),
+           (sizeof(thermal_frame_t) + sizeof(temperature_frame_t)) / 1048576.0);
+
+    printk("\nBuffer addresses:\n");
+    printk("  frame_buffer: %p\n", (void*)&frame_buffer);
+    printk("  temp_frame_buffer: %p\n", (void*)&temp_frame_buffer);
+    printk("\n");
+
+    /* Check if in PSRAM (should be 0x90000000 range) */
+    if ((uintptr_t)&frame_buffer >= 0x90000000) {
+        printk("OK - Buffers correctly in PSRAM!\n\n");
+    } else {
+        printk("ERROR: Buffers NOT in PSRAM! Address: %p\n\n",
+               (void*)&frame_buffer);
+    }
+
     printk("============================================================\n");
     printk("           Xi 640 ETH Thermal Camera System\n");
     printk("        SESSION 1: Zephyr Base + Frame Generator\n");
@@ -187,17 +213,8 @@ int main(void)
     printk(" Board:    STM32N6570-DK\n");
     printk(" Sensor:   640x480 @ 14-bit (synthetic mode)\n");
     printk(" Target:   50 FPS baseline\n");
-    printk(" Build:    " __DATE__ " " __TIME__ "\n");
     printk("============================================================\n");
     printk("\n");
-
-    /* Frame buffers placed in external RAM via __extram attribute */
-    printk("[0/3] Frame buffers (external RAM):\n");
-    printk("   Raw frame:  %zu bytes\n", sizeof(thermal_frame_t));
-    printk("   Temp frame: %zu bytes\n", sizeof(temperature_frame_t));
-    printk("   Total:      %zu bytes (%.1f MB)\n",
-           sizeof(thermal_frame_t) + sizeof(temperature_frame_t),
-           (sizeof(thermal_frame_t) + sizeof(temperature_frame_t)) / 1048576.0);
 
     /* Initialize thermal frame generator */
     printk("\n[1/3] Initializing thermal frame generator...\n");
