@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
-#include <zephyr/mem_mgmt/mem_attr.h>
 
 #include "thermal_types.h"           /* Common thermal frame types (include first!) */
 #include "thermal_frame_generator.h"
@@ -20,14 +19,9 @@
 /* ========================================
  * GLOBAL CONTEXT AND BUFFERS
  * ======================================== */
-/* Place large buffers in external RAM */
-#ifndef __extram
-#define __extram __attribute__((section(".psram_data")))
-#endif
-
-/* Place large buffers in PSRAM (NOT on stack!) */
-static __extram thermal_frame_t frame_buffer;
-static __extram temperature_frame_t temp_frame_buffer;
+/* Use Zephyr's heap in PSRAM (via k_malloc with CONFIG_STM32_MEMMAP) */
+static thermal_frame_t *frame_buffer = NULL;
+static temperature_frame_t *temp_frame_buffer = NULL;
 static Thermal_SIMD_Context_t thermal_ctx;  /* Small, stays in internal RAM */
 
 /* ========================================
@@ -116,8 +110,8 @@ static void print_statistics(void)
     printk("   Avg cycles:        %u\n", avg_cycles);
     printk("   Processing FPS:    %.1f\n", (double)processing_fps);
     printk("   Temperature range: %.2f°C - %.2f°C\n",
-           (double)temp_frame_buffer.min_temp, (double)temp_frame_buffer.max_temp);
-    printk("   Average temp:      %.2f°C\n", (double)temp_frame_buffer.avg_temp);
+           (double)temp_frame_buffer->min_temp, (double)temp_frame_buffer->max_temp);
+    printk("   Average temp:      %.2f°C\n", (double)temp_frame_buffer->avg_temp);
     printk("============================================================\n");
     printk("\n");
 
@@ -147,7 +141,7 @@ static void capture_thread_entry(void *p1, void *p2, void *p3)
     while (1) {
         /* Generate synthetic thermal frame */
         uint64_t start_time = k_uptime_get();
-        int ret = thermal_generator_create_frame(&frame_buffer);
+        int ret = thermal_generator_create_frame(frame_buffer);
         uint64_t generation_time = k_uptime_get() - start_time;
 
         if (ret < 0) {
@@ -157,7 +151,7 @@ static void capture_thread_entry(void *p1, void *p2, void *p3)
         }
 
         /* Process frame with thermal SIMD pipeline */
-        Thermal_SIMD_ProcessFrame(&thermal_ctx, &frame_buffer, &temp_frame_buffer);
+        Thermal_SIMD_ProcessFrame(&thermal_ctx, frame_buffer, temp_frame_buffer);
 
         /* Update statistics */
         update_performance_stats(generation_time);
@@ -181,30 +175,42 @@ int main(void)
     k_msleep(100);
 
     printk("\n\n\n");
-    printk("========================================\n");
-    printk("Xi 640 ETH - BOOT START\n");
-    printk("========================================\n");
+    printk("=== Xi 640 ETH Boot ===\n");
     printk("Build: %s %s\n", __DATE__, __TIME__);
     printk("\n");
 
-    printk("Frame buffer size: %zu bytes\n", sizeof(thermal_frame_t));
-    printk("Temp buffer size: %zu bytes\n", sizeof(temperature_frame_t));
-    printk("Total buffers: %zu bytes (%.1f MB)\n",
-           sizeof(thermal_frame_t) + sizeof(temperature_frame_t),
-           (sizeof(thermal_frame_t) + sizeof(temperature_frame_t)) / 1048576.0);
+    /* Allocate buffers from system heap (goes to PSRAM via STM32_MEMMAP) */
+    printk("[0/3] Allocating frame buffers from heap...\n");
 
-    printk("\nBuffer addresses:\n");
-    printk("  frame_buffer: %p\n", (void*)&frame_buffer);
-    printk("  temp_frame_buffer: %p\n", (void*)&temp_frame_buffer);
-    printk("\n");
-
-    /* Check if in PSRAM (should be 0x90000000 range) */
-    if ((uintptr_t)&frame_buffer >= 0x90000000) {
-        printk("OK - Buffers correctly in PSRAM!\n\n");
-    } else {
-        printk("ERROR: Buffers NOT in PSRAM! Address: %p\n\n",
-               (void*)&frame_buffer);
+    frame_buffer = k_malloc(sizeof(thermal_frame_t));
+    if (!frame_buffer) {
+        printk("FATAL: Cannot allocate frame_buffer (%zu bytes)\n",
+               sizeof(thermal_frame_t));
+        return -1;
     }
+
+    temp_frame_buffer = k_malloc(sizeof(temperature_frame_t));
+    if (!temp_frame_buffer) {
+        printk("FATAL: Cannot allocate temp_frame_buffer (%zu bytes)\n",
+               sizeof(temperature_frame_t));
+        k_free(frame_buffer);
+        return -1;
+    }
+
+    printk("OK - Buffers allocated at:\n");
+    printk("  frame: %p", (void*)frame_buffer);
+    if ((uintptr_t)frame_buffer >= 0x90000000) {
+        printk(" (PSRAM)\n");
+    } else {
+        printk(" (WARNING: NOT in PSRAM!)\n");
+    }
+    printk("  temp:  %p", (void*)temp_frame_buffer);
+    if ((uintptr_t)temp_frame_buffer >= 0x90000000) {
+        printk(" (PSRAM)\n");
+    } else {
+        printk(" (WARNING: NOT in PSRAM!)\n");
+    }
+    printk("\n");
 
     printk("============================================================\n");
     printk("           Xi 640 ETH Thermal Camera System\n");
